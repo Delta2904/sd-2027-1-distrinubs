@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: distrinubs
+
+  # En Docker Compose, las variables DB_* las pone docker-compose.yml.
+  # Los valores por omisión sirven para correr la aplicación fuera de Docker
+  # contra la base del contenedor.
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:distrinubs}
+    username: ${DB_USER:distrinubs}
+    password: ${DB_PASSWORD:distrinubs}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # El esquema lo crea Flyway (PRD, bitácora 1). Hibernate solo revisa al
+      # arrancar que las entidades coincidan con las tablas.
+      ddl-auto: validate
+
+  flyway:
+    # Migraciones con fecha y hora, escritas por cada dueño en paralelo
+    # (PRD, bitácora 2): una versión más vieja que llega después se aplica.
+    out-of-order: true
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
