@@ -236,6 +236,6 @@ class EnviosControllerTest {
                 .andExpect(jsonPath("$.resultado.veredicto", equalTo("ACCEPTED")))
                 .andExpect(jsonPath("$.resultado.tiempoMs", equalTo(15)))
                 .andExpect(jsonPath("$.resultado.memoriaKb", equalTo(2048)))
-                .andExpect(jsonPath("$.resultado.detalle", nullValue()));
+                .andExpect(jsonPath("$.resultado.detalle").doesNotExist());
     }
 }
