@@ -1,0 +1,33 @@
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 1rem;
+  color: #1c1c1c;
+}
+
+header { border-bottom: 2px solid #1c1c1c; margin-bottom: 1rem; }
+h1 { margin: 0; }
+section { margin-bottom: 1.5rem; }
+h2 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+
+label { display: block; margin-top: 0.6rem; font-weight: 600; }
+select, textarea, button { font: inherit; margin-top: 0.2rem; }
+select { min-width: 14rem; }
+textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; }
+button { padding: 0.4rem 1rem; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+
+pre#enunciado {
+  background: #f4f4f4;
+  padding: 0.6rem;
+  white-space: pre-wrap;
+}
+
+.aviso { color: #7a5200; font-size: 0.9rem; }
+.error { color: #b00020; }
+.ok { color: #0a6b2d; }
+
+table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
+th, td { border: 1px solid #bbb; padding: 0.3rem 0.5rem; text-align: left; }
+th { background: #eee; }

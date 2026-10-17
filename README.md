@@ -77,3 +77,31 @@ Parte de Enrique (@Quique1409).
 - Envíos es el único dueño que escribe en `envios`.
 - No escribe leases ni resultados (pertenecen a Evaluación).
 - Solo lee de `cuentas`, `problemas`, `leases_evaluacion` y `resultados`.
+## Etapa 01-monolito: front, cuentas de prueba y demostración
+
+Parte de Diego (@diegocontrras). Con `docker compose up` corriendo, desde la raíz del repositorio:
+
+**1. Sembrar las cuentas de demo** (idempotente: ids fijos del 1 al 5, se puede correr varias veces):
+
+```bash
+docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-cuentas.sql
+```
+
+**2. Front:** `http://localhost:8080`. HTML y JavaScript sin framework, servido por Spring Boot desde `src/main/resources/static`. Pantallas: elegir alumno de demo, subir envío, ver estado y veredicto, y tabla de posiciones.
+
+**3. Script de demostración** (Python 3, solo biblioteca estándar; recorre los puntos 1 a 6 llamando a la API):
+
+```bash
+python3 scripts/demo.py
+```
+
+Las soluciones por omisión del script suman dos enteros. Si el problema sembrado es otro, pasa las tuyas con `--correcta` y `--incorrecta`. Requiere el concurso sembrado y el worker de evaluación activo.
+
+**Endpoint que expone esta parte:** `GET /api/cuentas-demo`, con `id`, `usuario` y `nombre` de cada cuenta.
+
+### Riesgos declarados
+
+- **Sin autenticación.** La identidad de demo no tiene contraseña ni token: cualquiera puede enviar con cualquier cuenta de demo.
+- **Excepción temporal a la regla del dueño de datos.** La tabla `cuentas` es de Inicio de sesión, pero en 01 ese módulo no existe y `scripts/siembra-cuentas.sql` la escribe (PRD, sección 0, punto 2).
+- **Posible envío duplicado.** Si el servidor guarda un envío pero la respuesta se pierde en todos los reintentos automáticos, el clic siguiente del alumno genera un `intentoId` nuevo y crea otro envío. Los reintentos automáticos sí reutilizan el mismo `intentoId`.
+- **Contrato con otros módulos por confirmar.** El front y el script asumen el JSON de `POST/GET /api/envios`, `/api/concursos/activo` y `/api/concursos/activo/tabla` según la tabla de endpoints del PRD, y leen las respuestas de forma tolerante hasta que Enrique y Joshua fijen los nombres de campos.
