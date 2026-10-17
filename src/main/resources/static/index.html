@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Distrinubs</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header>
+    <h1>Distrinubs</h1>
+    <p id="concurso-nombre">Cargando concurso…</p>
+  </header>
+
+  <main>
+    <section id="seccion-alumno">
+      <h2>1. Alumno de demo</h2>
+      <label for="alumno">Elige tu cuenta</label>
+      <select id="alumno"></select>
+      <p class="aviso">Etapa 1: sin contraseña ni token. Cualquiera puede enviar con cualquier cuenta de demo.</p>
+    </section>
+
+    <section id="seccion-envio">
+      <h2>2. Subir envío</h2>
+      <label for="problema">Problema</label>
+      <select id="problema"></select>
+      <pre id="enunciado"></pre>
+
+      <label for="lenguaje">Lenguaje</label>
+      <select id="lenguaje">
+        <option value="PYTHON3">Python 3</option>
+      </select>
+
+      <label for="codigo">Código</label>
+      <textarea id="codigo" rows="10" spellcheck="false"></textarea>
+
+      <button id="enviar" type="button">Enviar</button>
+      <p id="mensaje-envio" role="status"></p>
+    </section>
+
+    <section id="seccion-estado">
+      <h2>3. Estado del envío</h2>
+      <p id="estado">Todavía no has enviado nada.</p>
+    </section>
+
+    <section id="seccion-tabla">
+      <h2>4. Tabla de posiciones (provisional)</h2>
+      <button id="actualizar-tabla" type="button">Actualizar</button>
+      <div id="tabla"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
