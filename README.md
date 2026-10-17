@@ -54,3 +54,26 @@ Requisito: Docker con Docker Compose.
 - [docs/PRD-Distrinubs.md](docs/PRD-Distrinubs.md): problema, alcance, decisiones de arquitectura, estado de cada parte y bitácora de cambios de enfoque. La bitácora vive en la rama `01-monolito`, no en `main`.
 - [CLAUDE.md](CLAUDE.md): reglas para los agentes que trabajan en el repositorio.
 - Referencia de la asignatura: [mexi-banco](https://github.com/OscarRuiz21/mexi-banco), con una rama por etapa.
+
+## Etapa 01-monolito: módulo de Envíos y consulta de estado
+
+Parte de Enrique (@Quique1409).
+
+### Endpoints implementados
+
+1. **`POST /api/envios`**:
+   - Recibe: `alumnoId`, `problemaId`, `intentoId`, `lenguaje` y `codigo`.
+   - Persiste el envío directamente en PostgreSQL con estado `EN_COLA` y fecha/hora del servidor (`now()`).
+   - Responde `201 Created` con `{ "envioId": id, "estado": "recibido" }` solo después de confirmar en disco.
+   - **Idempotencia y concurrencia**: ante reintentos o peticiones concurrentes con el mismo `intentoId` para la misma cuenta, captura la violación de unicidad `UNIQUE(cuenta_id, id_intento)`, recupera el envío original y responde `200 OK` con `{ "envioId": existenteId, "estado": "recibido" }` sin duplicar envíos.
+
+2. **`GET /api/envios/{envioId}`**:
+   - Si el envío no existe, responde `404 Not Found`.
+   - Si la evaluación ya concluyó (hay registro en `resultados`), responde `200 OK` con `estado: "evaluado"` y el objeto `resultado` (`veredicto`, `tiempoMs`, `memoriaKb`, `detalle`).
+   - Si el envío está siendo evaluado por un worker (hay registro en `leases_evaluacion` con `vence_en > now()`), deriva y responde `200 OK` con `estado: "evaluando"`.
+   - En cualquier otro caso, responde `200 OK` con `estado: "en cola"`.
+
+### Reglas de datos (Sección 6 del PRD)
+- Envíos es el único dueño que escribe en `envios`.
+- No escribe leases ni resultados (pertenecen a Evaluación).
+- Solo lee de `cuentas`, `problemas`, `leases_evaluacion` y `resultados`.
