@@ -105,3 +105,40 @@ Las soluciones por omisión del script suman dos enteros. Si el problema sembrad
 - **Excepción temporal a la regla del dueño de datos.** La tabla `cuentas` es de Inicio de sesión, pero en 01 ese módulo no existe y `scripts/siembra-cuentas.sql` la escribe (PRD, sección 0, punto 2).
 - **Posible envío duplicado.** Si el servidor guarda un envío pero la respuesta se pierde en todos los reintentos automáticos, el clic siguiente del alumno genera un `intentoId` nuevo y crea otro envío. Los reintentos automáticos sí reutilizan el mismo `intentoId`.
 - **Contrato con otros módulos por confirmar.** El front y el script asumen el JSON de `POST/GET /api/envios`, `/api/concursos/activo` y `/api/concursos/activo/tabla` según la tabla de endpoints del PRD, y leen las respuestas de forma tolerante hasta que Enrique y Joshua fijen los nombres de campos.
+
+## Etapa 01-monolito: Concursos, problemas y tabla de posiciones
+
+Parte de Joshua (@JoshRozam). Con `docker compose up` corriendo, desde la raíz del repositorio:
+
+**1. Sembrar el concurso y problemas** (idempotente: ids fijos, se puede correr varias veces sin duplicar ni romper nada):
+
+```bash
+docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-concursos.sql
+```
+
+Carga "Distrinubs Round 1" en estado `ABIERTO` con el problema A ("Suma simple", límite 1000 ms, 256 MB y 100 puntos base) y 3 casos de prueba (casos 1 y 2 en el marcador provisional, caso 3 privado). En la etapa 1 el límite de memoria se guarda, pero no se aplica.
+
+**2. Endpoints implementados:**
+
+1. **`GET /api/concursos/activo`**:
+   - Devuelve el concurso actualmente abierto con su lista de problemas ordenados por letra: letra, título, enunciado y límites de tiempo y memoria.
+   - Si no hay concurso abierto, responde `404 Not Found`.
+
+2. **`GET /api/concursos/activo/tabla`**:
+   - Devuelve la tabla de posiciones provisional calculada mediante consultas agregadas sobre envíos y resultados.
+   - **Reglas de puntuación y penalización** (PRD secciones 5 y 9):
+     - Minuto de la primera aceptación (desde el inicio del concurso) más 5 minutos por cada fallo previo a esa aceptación.
+     - Los envíos posteriores a la primera aceptación no penalizan.
+     - Problemas no resueltos no suman penalización.
+   - **Orden y desempate** (PRD bitácora 6):
+     1. Problemas resueltos descendente (`resueltos DESC`).
+     2. Menor penalización total ascendente (`penalizacion ASC`).
+     3. Desempate por tiempo: tiempo de llegada al servidor del último envío aceptado ascendente (`tiempo_ultimo_aceptado ASC`).
+     4. Empates absolutos comparten la misma posición.
+   - **Vigilancia de retraso**: si el retraso de envíos sin evaluar supera 5 minutos (300 segundos), se marca `avisoOrganizadores: true` y se registra una advertencia en los logs para los organizadores.
+   - Incluye a todas las cuentas registradas en la tabla provisional.
+
+### Reglas de datos (Sección 6 del PRD)
+- Concursos y problemas es el único dueño que escribe en `concursos`, `problemas` y `casos_prueba`.
+- Tabla de posiciones no tiene tabla propia en la etapa 1: solo lee de `envios`, `resultados`, `problemas`, `cuentas` y `concursos`.
+
