@@ -1,7 +1,7 @@
 # PRD · Distrinubs
 
 **Equipo:** Calderón Gutiérrez Victor Emiliano (@Delta2904), Contreras del Ángel Diego Adrían (@diegocontrras), Medrano Solano Enrique (@Quique1409), Rodríguez Zamora Joshua (@JoshRozam)
-**Fecha:** 09/10/2026 · revisión 15/10/2026
+**Fecha:** 09/10/2026 · revisión 17/10/2026
 
 ---
 
@@ -15,7 +15,9 @@ Cualquier agente que trabaje en una parte del proyecto lee primero esta sección
 
 | Parte | Rama | Estado | Alcance | Pendiente |
 |---|---|---|---|---|
-| Monolito | 01-monolito | En curso (entrega del sábado 17) | Los siete módulos de la sección 6 en una aplicación, con PostgreSQL y Docker Compose, con el alcance mínimo que se indica arriba | Lo que no entra en el alcance mínimo; tope de compilación; prueba de carga del marcador en vivo |
+| Monolito | 01-monolito | Integrado; verificado de punta a punta el 17/10/2026 con `scripts/demo.py` (puntos 1 a 6) | Los siete módulos de la sección 6 en una aplicación, con PostgreSQL y Docker Compose, con el alcance mínimo que se indica arriba | Lo que no entra en el alcance mínimo; tope de compilación; prueba de carga del marcador en vivo |
+| Base de datos y arranque | 01-monolito | Completado | Esquema en Flyway con las siete tablas y sus restricciones de unicidad, ids fijos para la siembra, `docker-compose.yml` con PostgreSQL 17 y volumen persistente, y aplicación Spring Boot 3.3 con Java 21 compilada dentro de Docker (bitácora 1 a 4) | Revisar la versión de Flyway, que avisa que no probó PostgreSQL 17 |
+| Evaluación de código | 01-monolito (punto 4 del alcance) | Completado | Un worker dentro de la aplicación toma el envío con un lease en `leases_evaluacion`, corre Python 3 con límite de tiempo sobre los casos del marcador provisional y guarda un resultado por envío: Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error o error de compilación. Retoma los envíos con lease vencido tras una caída (bitácora 7 a 11) | Sandbox por envío; límite de memoria; varios workers y renovación de lease; tope de compilación y recompilación en worker limpio; evaluación final al cierre |
 | Concursos, problemas y tabla de posiciones | 01-monolito (puntos 1 y 6 del alcance) | Completado | Siembra idempotente en `scripts/siembra-concursos.sql` ("Distrinubs Round 1"), `GET /api/concursos/activo` y `GET /api/concursos/activo/tabla` (con penalización de 5 min por fallo, desempate por tiempo de último aceptado y aviso por retraso > 5 min) | Dificultad por resueltos y desempate completo para etapas posteriores |
 | Envíos y estado del envío | 01-monolito (puntos 3 y 5 del alcance) | Completado | Endpoints `POST /api/envios` (persistencia directa en PostgreSQL como cola, idempotencia por `intentoId` y respuesta 201 "recibido") y `GET /api/envios/{envioId}` (derivación de "evaluando" por lease vigente y objeto `resultado`) | Validación de tokens y migración a cola con broker en la etapa 2 |
 | Separación en servicios | 02-separacion | Pendiente | Módulos como servicios, con llamadas HTTP y una cola entre envíos y evaluación | Elegir RabbitMQ o Kafka; orden respecto a las siguientes etapas |
@@ -49,7 +51,7 @@ Cualquier agente que trabaje en una parte del proyecto lee primero esta sección
 1. Concurso "Distrinubs Round 1" con un problema y dos o tres casos de prueba, cargado con un script de siembra y en estado abierto (ver "Creación de concursos" en la sección 5). (Joshua - Implementado)
 2. Identidad de demo: el alumno se elige de una lista de cuentas de prueba cargadas por el script de siembra, y su identificador viaja con el envío. No hay contraseña ni token. Se declara como riesgo. Como el módulo de inicio de sesión no está en 01, el script de siembra escribe esas cuentas: es una excepción temporal a la regla del dueño de datos y se declara en el README de la rama. (Diego)
 3. Subir envío: responde "recibido" con su identificador solo después de guardarlo. Un reintento con el mismo identificador devuelve el mismo envío. (Enrique - Implementado)
-4. Evaluación con un solo worker: toma el envío con un lease simple (columna con vencimiento), ejecuta el código con límite de tiempo y devuelve veredicto: Accepted, Wrong Answer, Time Limit Exceeded o error de compilación. (Emiliano)
+4. Evaluación con un solo worker: toma el envío con un lease simple (columna con vencimiento), ejecuta el código con límite de tiempo y devuelve veredicto: Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error o error de compilación. (Emiliano - Implementado)
 5. Ver estado y veredicto del envío. (Enrique - Implementado)
 6. Tabla provisional con problemas resueltos y penalización, con 5 minutos por fallo previo a la aceptación. (Joshua - Implementado)
 7. Front pequeño con selección de alumno de demo, subir envío, estado y tabla. (Diego)
@@ -136,7 +138,9 @@ En la etapa 1 todo corre en una sola computadora con contenedores. La separació
 - La subida responde "recibido" con un identificador solo después de quedar guardada en disco.
 - Cada clic en "enviar" genera un identificador de intento. Un reintento automático del mismo intento reutiliza ese identificador y devuelve el mismo envío, sin crear uno nuevo ni cobrar penalización.
 - Los estados que ve el alumno son: recibido, en cola, evaluando y resultado.
-- El resultado muestra Accepted, Wrong Answer, Time Limit Exceeded, Memory Exceeded o error de compilación.
+- El resultado muestra Accepted, Wrong Answer, Time Limit Exceeded, Memory Exceeded, Runtime Error o error de compilación.
+- Runtime Error es código que pasa la revisión de sintaxis pero termina con error al ejecutarse. Cuenta como envío fallido y penaliza igual que Wrong Answer.
+- Con Wrong Answer, Time Limit Exceeded o Runtime Error, el alumno solo ve el veredicto: ni el mensaje de error ni el número de caso, porque el mensaje puede revelar la entrada de un caso privado. Con error de compilación sí ve el mensaje, que solo habla de su código.
 - Un fallo del servidor no penaliza al alumno. Si el servidor se cae antes de responder "recibido", el alumno ve un error claro y vuelve a subir.
 
 ### Funcionalidad 3: Ver la tabla de posiciones (alumno)
@@ -301,6 +305,7 @@ Cada etapa vive en su propia rama, con su README y su docker-compose.yml:
 | Lease con renovación mientras el worker trabaja | Lease fijo | Un envío largo no pierde su lease; un worker caído sí |
 | Resultado único por envío (restricción de unicidad) | Contar cada evaluación | Un envío reevaluado tras una caída no suma dos veces |
 | Tope fijo de compilación; error no sintáctico se recompila en worker limpio | Revisión manual de casos dudosos | Separa fallas del servidor de fallas del alumno sin intervención humana |
+| Runtime Error como veredicto propio; con WA, TLE y RE el alumno solo ve el veredicto (bitácora 9) | Runtime Error como Wrong Answer con detalle; mostrar el stderr recortado | Distingue un error en ejecución de una respuesta incorrecta sin revelar la entrada de los casos privados |
 | Límites de tiempo y memoria validados días antes | Validar durante el concurso | Evita problemas imposibles de resolver dentro del límite |
 | Retraso máximo de 5 min con aviso a organizadores | Aviso a alumnos; sin límite | Los organizadores reaccionan sin alarmar a los alumnos |
 | Contenedor nuevo por envío | Reutilizar contenedores | Evita contaminación entre envíos; el costo de arranque lo paga el servidor |
@@ -320,7 +325,7 @@ Cada etapa vive en su propia rama, con su README y su docker-compose.yml:
 ## 10. Preguntas abiertas y desacuerdos
 
 - **Alcance de la rama 01 en dos días:** el alcance mínimo de la sección 0 y el reparto de responsables deben confirmarse por el equipo antes del sábado 17. Si algo no entra, se documenta en el README de la rama.
-- **Límite de compilación:** el valor numérico del tope fijo sigue pendiente.
+- **Límite de compilación:** el valor numérico del tope fijo sigue pendiente. En 01 hay una salvaguarda provisional de 10 s que no lo decide (bitácora 10).
 - **Límite del marcador en vivo:** 5 minutos está definido, pero debe confirmarse con una prueba de carga.
 - **Costo del contenedor por envío:** el arranque lo paga el servidor, no el alumno. Debe medirse en la prueba de carga.
 - **Problemas sin resolver:** definidos con valor cero. Falta confirmar si el organizador puede retirarlos antes del cierre.
@@ -344,4 +349,9 @@ Vacía en `main`, donde se definen las reglas del proyecto. La bitácora empieza
 | 4 | 15/10/2026 | Emiliano (@Delta2904) | La aplicación se construye con Maven dentro de Docker: un Dockerfile de dos etapas con la imagen oficial de Maven, sin wrapper `mvnw`. La base es PostgreSQL 17 | Igual que mexi-banco, que usa Maven, PostgreSQL 17 y un Dockerfile de dos etapas. Nadie necesita Java ni Maven instalados: `docker compose up` compila. A diferencia de mexi-banco, no se usa `mvnw`, porque en Windows con `core.autocrlf` se descarga con saltos de línea CRLF y falla dentro del contenedor Linux | Sección 8 |
 | 5 | 16/10/2026 | Enrique (@Quique1409) | `POST /api/envios` persiste el envío directamente con `estado = 'EN_COLA'` y responde `201 Created` con `estado: "recibido"`. Si choca por `(cuenta_id, id_intento)` (código 23505), recupera el envío y responde `200 OK` con `estado: "recibido"`. `GET /api/envios/{envioId}` devuelve `estado: "evaluado"` con el objeto `resultado` cuando existe veredicto, `estado: "evaluando"` con lease vigente, o `estado: "en cola"` | Define el ciclo de vida sin pasos intermedios: PostgreSQL es la cola directa para Evaluación. La concurrencia e idempotencia se delegan a la restricción de la base sin bloqueos manuales. `GET` separa el ciclo de vida del resultado técnico | Secciones 0, 5, 6 y 9 |
 | 6 | 17/10/2026 | Joshua (@JoshRozam) | El marcador provisional en la etapa 1 se ordena por: (1) problemas resueltos DESC, (2) penalización total ASC, (3) desempate por tiempo con la hora del último envío aceptado ASC (`llegada_en`), y si persiste empate exacto en todo, comparten posición. La tabla provisional incluye a todas las cuentas registradas | En la etapa 1 no entra el desempate completo (sección 10). Se define un orden mínimo determinista basado en el tiempo de llegada al servidor del último problema aceptado para resolver empates sin recurrir a memoria ni tiempo de ejecución, respetando empates compartidos si son idénticos | Secciones 0, 5 (funcionalidad 3), 9 y 10 |
+| 7 | 17/10/2026 | Emiliano (@Delta2904) | El worker de evaluación corre dentro de la aplicación, como un componente programado del paquete `evaluacion`, y no en un contenedor aparte. `docker compose up` levanta la base y la aplicación, y la aplicación trae el worker y Python 3 | La sección 0 pide un solo proceso y prohíbe servicios separados en 01. El worker lee la cola de PostgreSQL sin llamadas HTTP | Secciones 0 y 6 |
+| 8 | 17/10/2026 | Emiliano (@Delta2904) | La evaluación en vivo corre solo los casos con `en_marcador_provisional`. Si un problema no tiene casos marcados, corre todos. Los demás casos privados quedan para la evaluación final, que no entra en 01 | Aplica la decisión "evaluación en vivo con subconjunto de pruebas" de la sección 9. Sin evaluación final, un envío que solo falla un caso privado queda como Accepted en 01. Se declara como pendiente | Secciones 0 y 9 |
+| 9 | 17/10/2026 | Emiliano (@Delta2904) | Nuevo veredicto Runtime Error (`RUNTIME_ERROR`): el código pasa la revisión de sintaxis pero termina con error al ejecutarse. Cuenta como fallo y penaliza igual que Wrong Answer. Con WA, TLE y RE el alumno solo ve el veredicto, sin mensaje ni número de caso. Una migración nueva lo agrega a `resultados` | El PRD no decía qué pasa con un error en ejecución, y Wrong Answer lo escondería. No se muestra el mensaje porque el error de Python puede incluir la entrada de un caso privado. Se descartaron Wrong Answer con detalle y mostrar el stderr recortado | Secciones 0 (punto 4), 5 (historia 2) y 9 |
+| 10 | 17/10/2026 | Emiliano (@Delta2904) | Salvaguarda provisional de 10 s para la revisión de sintaxis (`py_compile`). Si se excede, no se guarda resultado: el envío vuelve a la cola cuando vence su lease y no se cobra al alumno. No es el tope de compilación de la sección 10, que sigue abierto | Con un solo worker, una revisión colgada detendría la evaluación de todos. Se descartaron usar el límite de tiempo del problema, porque mezcla compilación y ejecución, y no poner límite | Sección 10 |
+| 11 | 17/10/2026 | Emiliano (@Delta2904) | Ciclo del worker: toma el envío en cola más antiguo sin resultado ni lease vigente, con un lease que dura 10 s + (casos × límite de tiempo) + 10 s, sin renovación. Corre cada caso con `python3` en un directorio temporal y sin variables de entorno, y compara la salida ignorando los espacios al final de cada línea y las líneas vacías al final. Guarda el resultado solo si todavía tiene el lease. Si falla el servidor, por ejemplo porque no puede lanzar Python, no guarda nada y el envío vuelve a la cola al vencer el lease | Ningún envío se pierde ni cuenta dos veces, y una falla del servidor no penaliza (secciones 4 y 9). La renovación de lease y varios workers no entran en 01 | Secciones 6, 7 y 9 |
 

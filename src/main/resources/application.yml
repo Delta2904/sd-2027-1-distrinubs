@@ -22,6 +22,15 @@ spring:
     # (PRD, bitácora 2): una versión más vieja que llega después se aplica.
     out-of-order: true
 
+# Worker de evaluación (PRD, bitácora 7 a 11).
+evaluacion:
+  activa: true
+  python: python3
+  intervalo-ms: 1000
+  # Salvaguarda provisional, no es el tope de compilación de la sección 10.
+  salvaguarda-compilacion-ms: 10000
+  margen-lease-ms: 10000
+
 server:
   port: 8080
 
