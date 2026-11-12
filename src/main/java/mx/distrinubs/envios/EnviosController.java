@@ -31,7 +31,7 @@ import jakarta.validation.Valid;
  *       o "evaluado" con el resultado de la tabla {@code resultados}.</li>
  * </ul>
  *
- * <p>Dueño de datos (PRD sección 6): este módulo solo escribe en {@code envios}.
+ * <p>Dueño de datos: este módulo solo escribe en {@code envios}.
  * Solo lee {@code cuentas}, {@code problemas}, {@code leases_evaluacion} y {@code resultados}.
  */
 @RestController
@@ -48,7 +48,7 @@ public class EnviosController {
      * Registra un nuevo envío de solución.
      *
      * <p>La persistencia directa en {@code EN_COLA} permite a Evaluación tomarlo
-     * de inmediato (PRD, bitácora 5). La respuesta confirma {@code estado: "recibido"}
+     * de inmediato. La respuesta confirma {@code estado: "recibido"}
      * solo después de guardar en PostgreSQL.
      */
     @PostMapping

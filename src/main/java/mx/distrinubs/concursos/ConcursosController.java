@@ -21,7 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
  *       letra, título, enunciado y límites de tiempo y memoria.</li>
  * </ul>
  *
- * <p>Dueño de datos (PRD sección 6): este módulo es dueño de {@code concursos},
+ * <p>Dueño de datos: este módulo es dueño de {@code concursos},
  * {@code problemas} y {@code casos_prueba}.
  */
 @RestController

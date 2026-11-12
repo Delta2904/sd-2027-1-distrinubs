@@ -1,5 +1,5 @@
 # Etapa 1: compila con Maven dentro de Docker. No hace falta tener Java ni
-# Maven instalados (PRD, bitácora 4).
+# Maven instalados.
 FROM maven:3.9.9-eclipse-temurin-21 AS construccion
 WORKDIR /app
 COPY pom.xml .
@@ -7,9 +7,9 @@ RUN mvn -B -q dependency:go-offline
 COPY src ./src
 RUN mvn -B -q package -DskipTests
 
-# Etapa 2: el JRE, el jar y Python 3 para el worker de evaluación (PRD,
-# bitácora 7). La aplicación no corre como root, así el código de los alumnos
-# tampoco; aun así no es un sandbox (PRD, sección 0).
+# Etapa 2: el JRE, el jar y Python 3 para el worker de evaluación. La
+# aplicación no corre como root, así el código de los alumnos tampoco; aun así
+# no es un sandbox.
 FROM eclipse-temurin:21-jre
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \

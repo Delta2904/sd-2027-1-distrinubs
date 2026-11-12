@@ -1,10 +1,10 @@
--- Siembra de cuentas de demo (PRD, sección 0, punto 2).
+-- Siembra de cuentas de demo.
 --
 -- Excepción temporal a la regla del dueño de datos: la tabla `cuentas` es de
 -- Inicio de sesión, pero en 01 no existe ese módulo, así que la escribe este
 -- script. Se declara en el README de la etapa.
 --
--- Idempotente (PRD, sección 9): cada cuenta tiene un id fijo del 1 al 5 y se
+-- Idempotente: cada cuenta tiene un id fijo del 1 al 5 y se
 -- inserta o se actualiza por ese id. Correrlo varias veces no duplica nada.
 --
 -- Uso, con `docker compose up` ya corriendo (desde la raíz del repositorio):

@@ -38,7 +38,7 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Migraciones del esquema (PRD, bitácora 1). Desde Flyway 10, el
+        <!-- Migraciones del esquema con Flyway. Desde Flyway 10, el
              soporte de PostgreSQL viene en un módulo aparte. -->
         <dependency>
             <groupId>org.flywaydb</groupId>

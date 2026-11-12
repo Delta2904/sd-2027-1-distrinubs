@@ -1,4 +1,4 @@
-// Front pequeño de la etapa 1 (PRD, secciones 0 y 8): HTML y JavaScript sin framework.
+// Front pequeño de la etapa 1: HTML y JavaScript sin framework.
 // Solo llama a la API por HTTP. No hay inicio de sesión: la identidad es la cuenta de demo elegida.
 
 const REINTENTOS_MAX = 3;          // intentos totales de un mismo clic en "Enviar"
@@ -94,7 +94,7 @@ function mostrarEnunciado() {
 // --- Subir envío ---------------------------------------------------------------
 
 // Cada clic genera un intentoId. Los reintentos automáticos reutilizan ese mismo
-// identificador (PRD, sección 5, funcionalidad 2). Solo se reintenta ante fallas
+// identificador, así el servidor no crea otro envío ni penaliza. Solo se reintenta ante fallas
 // de red, timeout o 5xx; un 4xx es un error del envío y no se repite.
 async function subirConReintentos(cuerpo) {
   let ultimoError = null;

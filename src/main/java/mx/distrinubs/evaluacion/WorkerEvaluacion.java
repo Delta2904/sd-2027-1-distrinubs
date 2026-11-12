@@ -18,14 +18,14 @@ import mx.distrinubs.evaluacion.EjecutorPython.Evaluacion;
 import mx.distrinubs.evaluacion.EjecutorPython.FallaServidor;
 
 /**
- * El único worker de evaluación de la etapa 1 (PRD, sección 0, punto 4).
+ * El único worker de evaluación de la etapa 1.
  *
- * <p>Corre dentro de la aplicación (PRD, bitácora 7). Toma de {@code envios} el
+ * <p>Corre dentro de la aplicación, no en un contenedor aparte. Toma de {@code envios} el
  * envío en cola más antiguo sin resultado ni lease vigente, lo toma con un lease
  * en {@code leases_evaluacion}, lo evalúa y escribe su fila en {@code resultados}.
  * No llama a Envíos: "evaluando" se deriva del lease vigente.
  *
- * <p>Dueño de datos (PRD, sección 6): escribe {@code leases_evaluacion} y
+ * <p>Dueño de datos: escribe {@code leases_evaluacion} y
  * {@code resultados}; solo lee {@code envios}, {@code problemas} y
  * {@code casos_prueba}.
  */
@@ -39,7 +39,7 @@ class WorkerEvaluacion {
      * Toma un lease sobre el envío en cola más antiguo. Si el envío ya tenía un
      * lease vencido, lo retoma en la misma fila y suma {@code veces_tomado}; si el
      * lease sigue vigente, no lo toca. La duración es la salvaguarda de
-     * compilación + casos × límite de tiempo + margen (PRD, bitácora 11).
+     * compilación + casos × límite de tiempo + margen.
      */
     private static final String TOMAR_LEASE = """
             INSERT INTO leases_evaluacion (envio_id, worker, tomado_en, vence_en)
@@ -142,7 +142,7 @@ class WorkerEvaluacion {
             evaluacion = ejecutor.evaluar(envio.codigo(), casos, envio.limiteTiempoMs());
         } catch (FallaServidor e) {
             // Falla del servidor: no penaliza. El envío vuelve a la cola cuando
-            // vence el lease (PRD, sección 9).
+            // vence el lease.
             log.error("Envío {}: falla del servidor, se reintentará al vencer el lease: {}",
                     lease.envioId(), e.getMessage());
             return true;
@@ -162,7 +162,7 @@ class WorkerEvaluacion {
 
     /**
      * En vivo solo corre el subconjunto del marcador provisional; si el problema
-     * no marcó ninguno, corre todos (PRD, bitácora 8).
+     * no marcó ninguno, corre todos.
      */
     private List<Caso> casosDelMarcadorProvisional(long problemaId) {
         List<Caso> marcados = casos(problemaId, "AND en_marcador_provisional");

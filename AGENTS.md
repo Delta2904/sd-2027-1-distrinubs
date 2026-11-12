@@ -4,7 +4,8 @@ Este repositorio lo trabajan varios agentes (Claude Code, Codex, Antigravity u o
 
 Antes de cualquier cambio, lee en este orden:
 
-1. [CLAUDE.md](CLAUDE.md): entrada al repositorio y cómo se trabaja.
-2. [docs/PRD-Distrinubs.md](docs/PRD-Distrinubs.md): sección 0 (etapa, alcance y reglas), sección 6 (dueños de datos), sección 9 (decisiones) y sección 10 (lo no decidido).
+1. [CLAUDE.md](CLAUDE.md): las reglas y cómo se trabaja.
+2. [docs/PRD.md](docs/PRD.md): qué se construye y por qué. Sección 6 (dueños de datos), sección 9 (decisiones) y sección 10 (lo no decidido).
+3. [docs/PLAN.md](docs/PLAN.md): etapa actual, orden del trabajo, reparto y fechas.
 
-Si el PRD y este archivo se contradicen, manda el PRD.
+Si algo de CLAUDE.md contradice una decisión del PRD, manda el PRD.

@@ -1,9 +1,9 @@
--- Siembra de concursos, problemas y casos de prueba (PRD, sección 0, punto 1 y sección 5).
+-- Siembra de concursos, problemas y casos de prueba.
 --
--- Dueño de datos: Concursos y problemas (PRD, sección 6).
+-- Dueño de datos: Concursos y problemas.
 -- Solo este módulo escribe en las tablas concursos, problemas y casos_prueba.
 --
--- Idempotente (PRD, sección 9): usa identificadores fijos del 1 al 999 y hace
+-- Idempotente: usa identificadores fijos del 1 al 999 y hace
 -- upsert por id (ON CONFLICT (id) DO UPDATE). Correrlo varias veces no duplica
 -- ni rompe nada.
 --
