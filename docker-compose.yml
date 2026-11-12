@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   app:
-    # La aplicación incluye el worker de evaluación y Python 3 (PRD, bitácora 7).
+    # La aplicación incluye el worker de evaluación y Python 3.
     build: .
     ports:
       # Si el 8080 ya está ocupado: APP_PUERTO=8081 docker compose up

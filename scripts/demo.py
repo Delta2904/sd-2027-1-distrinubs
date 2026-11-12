@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script de demostración de la etapa 01-monolito (PRD, sección 0, punto 8).
+"""Script de demostración de la etapa 01-monolito.
 
 Recorre de punta a punta los puntos 1 a 6 llamando a la API, solo con la
 biblioteca estándar de Python 3. Se puede correr varias veces: cada corrida usa

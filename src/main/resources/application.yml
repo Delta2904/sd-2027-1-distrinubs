@@ -13,21 +13,21 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      # El esquema lo crea Flyway (PRD, bitácora 1). Hibernate solo revisa al
+      # El esquema lo crea Flyway. Hibernate solo revisa al
       # arrancar que las entidades coincidan con las tablas.
       ddl-auto: validate
 
   flyway:
-    # Migraciones con fecha y hora, escritas por cada dueño en paralelo
-    # (PRD, bitácora 2): una versión más vieja que llega después se aplica.
+    # Migraciones con fecha y hora, escritas por cada dueño en paralelo:
+    # una versión más vieja que llega después se aplica.
     out-of-order: true
 
-# Worker de evaluación (PRD, bitácora 7 a 11).
+# Worker de evaluación.
 evaluacion:
   activa: true
   python: python3
   intervalo-ms: 1000
-  # Salvaguarda provisional, no es el tope de compilación de la sección 10.
+  # Salvaguarda provisional: todavía no hay un tope de compilación definido.
   salvaguarda-compilacion-ms: 10000
   margen-lease-ms: 10000
 

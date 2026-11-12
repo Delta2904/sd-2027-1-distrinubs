@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 /**
  * Corre una solución en Python 3 contra casos de prueba y decide el veredicto.
  *
- * <p>Sin sandbox (PRD, sección 0): el código corre como proceso hijo de la
+ * <p>Sin sandbox: el código corre como proceso hijo de la
  * aplicación, en un directorio temporal y sin variables de entorno. Es un riesgo
  * declarado, no una condición de producción.
  */
@@ -56,8 +56,8 @@ class EjecutorPython {
             dir = Files.createTempDirectory("envio-");
             Files.writeString(dir.resolve("solucion.py"), codigo, StandardCharsets.UTF_8);
 
-            // Revisión de sintaxis. La salvaguarda es provisional y no es el tope
-            // de compilación de la sección 10 (PRD, bitácora 10).
+            // Revisión de sintaxis. La salvaguarda es provisional: todavía no hay
+            // un tope de compilación definido.
             Corrida compilacion = correr(dir, List.of(python, "-I", "-m", "py_compile", "solucion.py"),
                     null, "compilacion", salvaguardaCompilacionMs);
             if (compilacion.excedioTiempo()) {
@@ -75,7 +75,8 @@ class EjecutorPython {
                         entrada, "caso-" + caso.orden(), limiteTiempoMs);
                 tiempoMaximo = Math.max(tiempoMaximo, corrida.tiempoMs());
 
-                // Con WA, TLE y RE el alumno solo ve el veredicto (PRD, bitácora 9).
+                // Con WA, TLE y RE el alumno solo ve el veredicto: el mensaje de error
+                // podría revelar la entrada de un caso privado.
                 if (corrida.excedioTiempo()) {
                     return new Evaluacion("TIME_LIMIT_EXCEEDED", (int) corrida.tiempoMs(), null);
                 }
@@ -101,7 +102,7 @@ class EjecutorPython {
 
     /**
      * Compara sin espacios al final de cada línea ni líneas vacías al final, y
-     * acepta saltos de línea de Windows (PRD, bitácora 11).
+     * acepta saltos de línea de Windows.
      */
     static String normalizar(String texto) {
         return texto.lines().map(String::stripTrailing).collect(Collectors.joining("\n")).stripTrailing();

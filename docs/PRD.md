@@ -1,82 +1,30 @@
 # PRD · Distrinubs
 
 **Equipo:** Calderón Gutiérrez Victor Emiliano (@Delta2904), Contreras del Ángel Diego Adrían (@diegocontrras), Medrano Solano Enrique (@Quique1409), Rodríguez Zamora Joshua (@JoshRozam)
-**Fecha:** 09/10/2026 · revisión 17/10/2026
+**Fecha:** 09/10/2026 · revisiones 17/10/2026 y 12/11/2026
 
 ---
 
-## 0. Instrucciones para los agentes y estado del proyecto
+## 0. Alcance de la etapa 1 (`01-monolito`)
 
-Cualquier agente que trabaje en una parte del proyecto lee primero esta sección, las secciones 5 a 9 y la fila de su parte en la tabla de estado.
+**Etapa actual: 01-monolito.** Un monolito: una sola aplicación, en un solo proceso, con sus siete módulos y una sola base de datos. En esta etapa está prohibido crear servicios separados o llamadas HTTP entre módulos, gateway, directorio, balanceador o réplicas, cola externa (RabbitMQ o Kafka) y Redis; si una de estas piezas hace falta, se propone en la bitácora (sección 11) antes de implementarla. La etapa 2, `02-separacion`, separa todo. El orden del trabajo, el reparto y las fechas están en [PLAN.md](PLAN.md); las reglas para los agentes, en [CLAUDE.md](../CLAUDE.md).
 
-**Etapa actual: 01-monolito.** Esta etapa es un monolito: una sola aplicación, en un solo proceso, con sus siete módulos y una sola base de datos. **Está prohibido en esta etapa** crear servicios separados o llamadas HTTP entre módulos, gateway, directorio, balanceador o réplicas, cola externa (RabbitMQ o Kafka) y Redis. Si alguien cree que una de estas piezas hace falta, lo propone en la bitácora de la rama antes de implementarla.
-
-**Estado de las partes.** Actualiza esta tabla al terminar cada parte.
-
-| Parte | Rama | Estado | Alcance | Pendiente |
-|---|---|---|---|---|
-| Monolito | 01-monolito | Integrado; verificado de punta a punta el 17/10/2026 con `scripts/demo.py` (puntos 1 a 6) | Los siete módulos de la sección 6 en una aplicación, con PostgreSQL y Docker Compose, con el alcance mínimo que se indica arriba | Lo que no entra en el alcance mínimo; tope de compilación; prueba de carga del marcador en vivo |
-| Base de datos y arranque | 01-monolito | Completado | Esquema en Flyway con las siete tablas y sus restricciones de unicidad, ids fijos para la siembra, `docker-compose.yml` con PostgreSQL 17 y volumen persistente, y aplicación Spring Boot 3.3 con Java 21 compilada dentro de Docker (bitácora 1 a 4) | Revisar la versión de Flyway, que avisa que no probó PostgreSQL 17 |
-| Evaluación de código | 01-monolito (punto 4 del alcance) | Completado | Un worker dentro de la aplicación toma el envío con un lease en `leases_evaluacion`, corre Python 3 con límite de tiempo sobre los casos del marcador provisional y guarda un resultado por envío: Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error o error de compilación. Retoma los envíos con lease vencido tras una caída (bitácora 7 a 11) | Sandbox por envío; límite de memoria; varios workers y renovación de lease; tope de compilación y recompilación en worker limpio; evaluación final al cierre |
-| Concursos, problemas y tabla de posiciones | 01-monolito (puntos 1 y 6 del alcance) | Completado | Siembra idempotente en `scripts/siembra-concursos.sql` ("Distrinubs Round 1"), `GET /api/concursos/activo` y `GET /api/concursos/activo/tabla` (con penalización de 5 min por fallo, desempate por tiempo de último aceptado y aviso por retraso > 5 min) | Dificultad por resueltos y desempate completo para etapas posteriores |
-| Envíos y estado del envío | 01-monolito (puntos 3 y 5 del alcance) | Completado | Endpoints `POST /api/envios` (persistencia directa en PostgreSQL como cola, idempotencia por `intentoId` y respuesta 201 "recibido") y `GET /api/envios/{envioId}` (derivación de "evaluando" por lease vigente y objeto `resultado`) | Validación de tokens y migración a cola con broker en la etapa 2 |
-| Separación en servicios | 02-separacion | Pendiente | Módulos como servicios, con llamadas HTTP y una cola entre envíos y evaluación | Elegir RabbitMQ o Kafka; orden respecto a las siguientes etapas |
-| Gateway, réplicas y balanceador | Por definir | Pendiente | Gateway en varias réplicas, balanceador en contenedor por conexiones activas | Herramienta del balanceador; framework de Java |
-| Front pequeño | 01-monolito (punto 7 del alcance) | Tecnología decidida para la etapa 1: HTML y JavaScript sin framework | Selección de alumno de demo, subir envío, estado y tabla. El panel de la cola, la lista de envíos para organizadores e inicio de sesión quedan pendientes | Confirmar que el equipo acepta el alcance |
-| Front en React | Etapa posterior, cuando el front se separe del back | Decidido: React | Mismas pantallas, sobre el front ya probado | Cuándo entra en el plan de ramas |
-| Inicio de sesión y Administración | Etapa posterior (propuesta: primera pieza de la etapa 2) | Pendiente; fuera de 01 | Credenciales, tokens, revocación, validación en la subida, roles y bloqueos | Confirmar la etapa; por ahora en la 01 no se implementa |
-| Sesiones en Redis | Por definir | Pendiente | Inicio de sesión como servicio aparte | Cuándo entra en el plan de ramas |
-| Partes opcionales | Por definir | Opcional | Cloud o demostraciones más complejas, solo si sobra tiempo | Qué se elige y cuándo |
-
-**Entregables del curso.** El trabajo se organiza por las entregas que pide el profesor. La entrega vigente define el alcance de las partes que toca.
-
-| Entrega | Fecha límite | Qué se pide |
-|---|---|---|
-| Repo, `main` y `01-monolito` | Sábado 17 de octubre, 07:00 | Repo `sd-2027-1-distrinubs` con el colaborador OscarRuiz21. En `main`: README.md (qué es, quiénes son, cómo se levanta) y `docs/PRD.md`. En `01-monolito`: la aplicación con su base de datos y su `docker-compose.yml`, que corra y tenga las operaciones principales del PRD. Después, respuesta en la Discussion #44 con la liga al repo |
-| Etapa 2, `02-separacion` | Por anunciar | Por definir cuando el profesor lo publique |
-
-**Responsables (confirmados por el equipo).** Cada integrante es responsable de su parte, de sus commits y de usar sus propios agentes para hacerla. En la defensa se nota quién hizo qué en el historial de commits. La carga relativa, de mayor a menor, es: Emiliano, Joshua, Enrique, Diego.
-
-| Integrante | Responsable de | Depende de |
-|---|---|---|
-| Emiliano (@Delta2904) | Base de datos (esquema, `docker-compose.yml`), Evaluación de código (compilar o interpretar, casos, veredicto, tiempo y memoria, leases), `main` (README y `docs/PRD.md`) e integración de la demo. Coordina el proyecto | Nadie: entrega primero el esquema |
-| Diego (@diegocontrras) | Front pequeño, cuentas de prueba para la identidad de demo y script de demostración. Inicio de sesión y Administración pasan a una etapa posterior | El esquema de Emiliano |
-| Enrique (@Quique1409) | Envíos (recibir el código, guardar con su identificador y el del alumno de demo, responder "recibido") | El esquema de Emiliano; el contrato de envíos lo define él y lo usa Evaluación |
-| Joshua (@JoshRozam) | Concursos y problemas (carga, casos, límites) y Tabla de posiciones (marcador provisional) | El esquema de Emiliano |
-
-**Alcance de `01-monolito` (recomendación, por confirmar en equipo).** La entrega pide que el monolito corra y tenga las operaciones principales. Se propone un flujo completo y estrecho en lugar de muchas piezas a medias: el alumno entra, sube una solución, la evaluación la juzga y la tabla la refleja. Así se puede demostrar de punta a punta en la defensa.
+**Alcance de `01-monolito`.** La entrega pide que el monolito corra y tenga las operaciones principales. Se propone un flujo completo y estrecho en lugar de muchas piezas a medias: el alumno entra, sube una solución, la evaluación la juzga y la tabla la refleja. Así se puede demostrar de punta a punta en la defensa.
 
 **Entra en 01:**
 
-1. Concurso "Distrinubs Round 1" con un problema y dos o tres casos de prueba, cargado con un script de siembra y en estado abierto (ver "Creación de concursos" en la sección 5). (Joshua - Implementado)
-2. Identidad de demo: el alumno se elige de una lista de cuentas de prueba cargadas por el script de siembra, y su identificador viaja con el envío. No hay contraseña ni token. Se declara como riesgo. Como el módulo de inicio de sesión no está en 01, el script de siembra escribe esas cuentas: es una excepción temporal a la regla del dueño de datos y se declara en el README de la rama. (Diego)
-3. Subir envío: responde "recibido" con su identificador solo después de guardarlo. Un reintento con el mismo identificador devuelve el mismo envío. (Enrique - Implementado)
-4. Evaluación con un solo worker: toma el envío con un lease simple (columna con vencimiento), ejecuta el código con límite de tiempo y devuelve veredicto: Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error o error de compilación. (Emiliano - Implementado)
-5. Ver estado y veredicto del envío. (Enrique - Implementado)
-6. Tabla provisional con problemas resueltos y penalización, con 5 minutos por fallo previo a la aceptación. (Joshua - Implementado)
-7. Front pequeño con selección de alumno de demo, subir envío, estado y tabla. (Diego)
-8. Script de demostración que recorra los puntos 1 a 6. (Diego)
+1. Concurso "Distrinubs Round 1" con un problema y dos o tres casos de prueba, cargado con un script de siembra y en estado abierto (ver "Creación de concursos" en la sección 5).
+2. Identidad de demo: el alumno se elige de una lista de cuentas de prueba cargadas por el script de siembra, y su identificador viaja con el envío. No hay contraseña ni token. Se declara como riesgo. Como el módulo de inicio de sesión no está en 01, el script de siembra escribe esas cuentas: es una excepción temporal a la regla del dueño de datos y se declara en el README de la rama.
+3. Subir envío: responde "recibido" con su identificador solo después de guardarlo. Un reintento con el mismo identificador devuelve el mismo envío.
+4. Evaluación con un solo worker: toma el envío con un lease simple (columna con vencimiento), ejecuta el código con límite de tiempo y devuelve veredicto: Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error o error de compilación.
+5. Ver estado y veredicto del envío.
+6. Tabla provisional con problemas resueltos y penalización, con 5 minutos por fallo previo a la aceptación.
+7. Front pequeño con selección de alumno de demo, subir envío, estado y tabla.
+8. Script de demostración que recorra los puntos 1 a 6.
 
 Para los alumnos, en 01 se usa un solo lenguaje: Python 3, por ser el más directo de ejecutar con límite de tiempo.
 
-**No entra en 01 (queda pendiente y se declara en el README de la rama):** inicio de sesión con credenciales y tokens, su revocación y su validación en la subida, que pasan a una etapa posterior (ver la tabla de estado); sandbox con contenedor nuevo por envío; varios lenguajes desde la tabla de configuración; límite de memoria; varios workers y renovación de lease; verificación de la solución de referencia; invalidación al cierre; dificultad por resueltos; desempate completo; roles y bloqueos; registro de acciones; creación de concursos desde una interfaz de organizador (en 01 los crea la siembra); panel de la cola y lista de envíos para organizadores. Sin sandbox, el código de los alumnos corre sin aislamiento en la computadora del equipo. Eso se declara como riesgo y no se presenta como condición de producción.
-
-**Lo que se entrega el sábado 17:**
-
-- `main`: README.md (qué es, quiénes son, cómo se levanta con `docker compose up`) y `docs/PRD.md`.
-- `01-monolito`: la aplicación, PostgreSQL, `docker-compose.yml`, un README de la rama (qué hace, qué no hace, pendientes) y un script de demostración que recorra los puntos 1 a 6.
-- Respuesta en la Discussion #44 con la liga al repo.
-
-**Reglas para el agente:**
-
-1. **Decisiones.** Antes de implementar algo, revisa la sección 9. Si lo pedido contradice una decisión, detente y pregunta. No la cambies por tu cuenta.
-2. **Dueños de datos.** Respeta la tabla de la sección 6. Si un módulo necesita un dato que no le pertenece, pide el cambio al dueño; no escribas en su tabla.
-3. **Antes de cada etapa.** Usa una skill para afinar el enfoque: `metodo-socratico` para decidir cómo se construye la etapa, y `product-manager` si la etapa agrega, quita o cambia funcionalidades. Registra en este documento lo que se decidió.
-4. **El PRD es vivo.** Los cambios de funcionalidades se hacen con `product-manager` y se reflejan aquí. Lo que se aprende en clase también puede cambiar una decisión: se revisa en la sección 9 antes de tocar el código.
-5. **Opcionales.** Las partes marcadas como opcionales solo empiezan cuando la parte obligatoria corre y está documentada. Su objetivo es demostrar lo aprendido en el curso.
-6. **Preguntas abiertas.** Lo que está en la sección 10 se trata como no decidido. No lo implementes como si estuviera resuelto.
-7. **Cierre de cada rama.** El README de la rama declara qué hace, qué no hace y qué queda pendiente. La tabla de estado de este documento se actualiza en la misma entrega.
-8. **Bitácora de cambios.** A partir de la rama `01-monolito`, todo cambio de enfoque, lo proponga quien lo proponga, se registra en la sección 11 del PRD de esa rama antes de implementarse. Si cambia una decisión, también se actualiza su fila en la sección 9. Si durante la implementación alguien decide otra cosa, lo registra en la misma rama, en el mismo commit que el código. Sin entrada en la bitácora, el cambio no está aprobado. En `main` no se usa la bitácora.
+**No entra en 01 (queda pendiente y se declara en el README de la rama):** inicio de sesión con credenciales y tokens, su revocación y su validación en la subida, que pasan a la etapa 2; sandbox con contenedor nuevo por envío; varios lenguajes desde la tabla de configuración; límite de memoria; varios workers y renovación de lease; verificación de la solución de referencia; invalidación al cierre; dificultad por resueltos; desempate completo; roles y bloqueos; registro de acciones; creación de concursos desde una interfaz de organizador (en 01 los crea la siembra); panel de la cola y lista de envíos para organizadores. Sin sandbox, el código de los alumnos corre sin aislamiento en la computadora del equipo. Eso se declara como riesgo y no se presenta como condición de producción.
 
 ---
 
@@ -98,7 +46,7 @@ Un solo servidor no cubre tres necesidades:
 - Que la carga de 200 alumnos enviando a la vez se reparta entre varios evaluadores.
 - Que los resultados no se pierdan aunque se reinicie el sistema.
 
-En la etapa 1 todo corre en una sola computadora con contenedores. La separación en servicios, con su red y sus fallas parciales, llega en etapas posteriores.
+En la etapa 1 todo corre en una sola computadora con contenedores. La separación en servicios, con su red y sus fallas parciales, llega en la etapa 2 (`02-separacion`).
 
 ## 3. Objetivos y lo que no vamos a hacer
 
@@ -113,7 +61,7 @@ En la etapa 1 todo corre en una sola computadora con contenedores. La separació
 - Rechazar envíos por saturación.
 - Consenso en el gateway.
 - Atar a un alumno a una instancia específica.
-- Demostración con varias ubicaciones ni servidores en la nube (queda para etapas posteriores).
+- Demostración con varias ubicaciones ni servidores en la nube (queda como parte opcional de la etapa 2).
 
 ## 4. El requisito que perseguimos y lo que dejamos atrás
 
@@ -122,6 +70,8 @@ En la etapa 1 todo corre en una sola computadora con contenedores. La separació
 **Dejamos atrás:** la disponibilidad durante una caída de la computadora. Si la máquina se apaga o se reinicia, el sistema no responde hasta que vuelva a arrancar, incluida la lectura de problemas. Los envíos ya recibidos sobreviven y se evalúan al regresar.
 
 ## 5. Historias de usuario
+
+Las funcionalidades 1, 4, 5, 6 y 7 son lo último de la etapa 2 y quedan fuera si no alcanza el tiempo (ver [PLAN.md](PLAN.md)).
 
 ### Funcionalidad 1: Iniciar sesión (alumno)
 
@@ -235,17 +185,30 @@ Cada dato tiene un solo módulo que escribe:
 
 Administración no escribe cuentas directamente: pide los cambios a Inicio de sesión.
 
-### Servicios resultantes
+### Servicios resultantes (etapa 2)
 
-Los mismos módulos separados como servicios, con una cola entre envíos y evaluación. El tipo de cola (RabbitMQ o Kafka) se decide en esa etapa.
+Los siete módulos pasan a servicios, con RabbitMQ entre envíos y evaluación (bitácora 13). El orden en que se separan está en [PLAN.md](PLAN.md).
+
+| Servicio | Módulos | Escribe | Cómo se escala |
+|---|---|---|---|
+| `gateway` | Ninguno: es la única puerta | Nada (sin estado) | 2 réplicas detrás de nginx |
+| `envios` | Envíos | `envios` | Con el gateway |
+| `evaluacion` | Evaluación de código | `leases_evaluacion`, `resultados` | N workers que toman de la cola |
+| `concursos` | Concursos y problemas. Al principio conserva la Tabla de posiciones y las cuentas de demo | `concursos`, `problemas`, `casos_prueba` | Una instancia |
+| `marcador` | Tabla de posiciones | Marcador y dificultad final | Réplicas, con Redis delante |
+| `identidad` | Inicio de sesión y Administración | Cuentas, tokens y registro de acciones | Una instancia |
+
+PostgreSQL (módulo 7) no es un servicio de la aplicación; Eureka, nginx, RabbitMQ y Redis son infraestructura. Cada servicio escribe solo sus tablas, según la tabla de dueños de datos. En `identidad` los dos módulos siguen separados por paquete: Administración pide a Inicio de sesión los cambios de cuentas.
 
 ### Plan de ramas
 
-Cada etapa vive en su propia rama, con su README y su docker-compose.yml:
+Solo hay tres ramas de etapa (bitácora 12), cada una con su README y, las de código, su docker-compose.yml:
 
-1. **01-monolito:** los siete módulos en una aplicación, con PostgreSQL, cola en la base y Docker Compose.
-2. **02-separacion:** los módulos como servicios, con llamadas por HTTP y la cola entre envíos y evaluación.
-3. **Etapas posteriores:** gateway con réplicas, balanceador, sesiones en Redis cuando inicio de sesión sea un servicio aparte. El orden exacto de estas etapas está por definir.
+1. **main:** el README que presenta el proyecto, este PRD y el reporte final.
+2. **01-monolito:** los siete módulos en una aplicación, con PostgreSQL, cola en la base y Docker Compose. Se cierra el 15/11 y queda de respaldo.
+3. **02-separacion:** toda la separación: servicios, RabbitMQ, gateway con réplicas, directorio, balanceador, caché y resiliencia, y al final inicio de sesión con Redis. No hay una rama por tema como en mexi-banco, donde cada rama siguió una clase.
+
+Cada integrante trabaja en una rama personal y la integra con un pull request hacia la rama de la etapa. Los puntos de retorno son tags, no ramas.
 
 ---
 
@@ -253,13 +216,14 @@ Cada etapa vive en su propia rama, con su README y su docker-compose.yml:
 
 | Pieza | Dónde vive | Por qué | Qué pasa si falla |
 |---|---|---|---|
-| API gateway | Varias réplicas en Docker Compose (`--scale`), sin estado | Sin estado, no necesita consenso; la redundancia evita un punto único en el gateway | Si cae una réplica, las demás siguen atendiendo. Si se cae la computadora, el sistema no responde hasta reiniciar |
-| Directorio / DNS | No aplica en la etapa 1. Los alumnos entran por `http://localhost:8080` | Es una demostración en una sola máquina; no hay nombres que resolver | Si la máquina se reinicia, la URL vuelve a funcionar al arrancar |
-| Balanceo | Un contenedor balanceador aparte (herramienta por decidir), delante de las réplicas del gateway, que reparte por conexiones activas | Cumple la decisión de la sección 9 sin trabajo extra | Si cae el balanceador, no hay entrada hasta que Compose lo reinicie |
+| API gateway | Spring Cloud Gateway en varias réplicas en Docker Compose (`--scale`), sin estado. Es la única puerta: reenvía cada ruta al servicio por su nombre, sin lógica de negocio | Sin estado, no necesita consenso; la redundancia evita un punto único en el gateway | Si cae una réplica, las demás siguen atendiendo. Si se cae la computadora, el sistema no responde hasta reiniciar |
+| Directorio / DNS | Etapa 1: no aplica; los alumnos entran por `http://localhost:8080`. Etapa 2: Eureka en su contenedor; los servicios se registran y el gateway los encuentra por nombre. Los workers de evaluación no lo usan: toman trabajo de RabbitMQ | En la etapa 1 es una demostración en una sola máquina y no hay nombres que resolver. En la 2 las instancias cambian de dirección y el directorio evita direcciones fijas; es el que se practicó en el laboratorio S07 | Una instancia que muere sin avisar sigue en la lista hasta que vence su registro: se acorta ese tiempo y el gateway reintenta con otra. Si cae Eureka, el gateway sigue con la última lista que guardó, sin ver instancias nuevas |
+| Balanceo | Un contenedor nginx aparte, con `least_conn`, delante de las réplicas del gateway. Del gateway a los servicios reparte Spring Cloud LoadBalancer con la lista de Eureka, por turnos | Cumple la decisión de la sección 9 en la entrada sin trabajo extra | Si cae nginx, no hay entrada hasta que Compose lo reinicie |
 | Datos durables | PostgreSQL en un contenedor con volumen persistente, sin réplica | Un solo lugar donde vive el estado: envíos, resultados, leases y marcador | Si la máquina se reinicia, lo confirmado en disco sobrevive. Los envíos en evaluación recuperan su lease cuando expira |
-| Sesiones | PostgreSQL en la etapa 1. Redis en etapas posteriores | Una sola fuente de verdad en la etapa 1; Redis cuando inicio de sesión sea un servicio aparte | Si la base se reinicia, los alumnos vuelven a iniciar sesión |
-| Operaciones entre servicios | En la etapa 1 no hay llamadas de red: la cola es una tabla de PostgreSQL. En la etapa 2, una cola entre servicios transporta identificadores; el estado sigue en PostgreSQL | Desacopla gateway y evaluación cuando se separan | Etapa 1: un envío en evaluación vuelve a la cola cuando su lease expira |
-| Manejo de fallas | Lease con renovación escrito por Evaluación; resultado único por envío (restricción de unicidad); tope fijo de compilación con reintento en worker limpio; identificador por intento de envío | Ningún envío se pierde ni cuenta dos veces | El envío vuelve a la cola; las fallas del servidor no penalizan al alumno |
+| Sesiones | PostgreSQL en la etapa 1. Redis en la etapa 2, cuando `identidad` sea un servicio aparte | Una sola fuente de verdad en la etapa 1; Redis cuando inicio de sesión sea un servicio aparte | Si la base se reinicia, los alumnos vuelven a iniciar sesión |
+| Caché | Redis en un contenedor, sin réplica. Guarda el marcador provisional que sirve `marcador` | El marcador se lee mucho más de lo que cambia y se tolera 5 minutos de atraso: es una copia derivada que se permite estar vieja. La verdad sigue en PostgreSQL | Si Redis cae, el marcador se calcula desde PostgreSQL, más lento; la prueba de carga debe medirlo |
+| Operaciones entre servicios | Etapa 1: no hay llamadas de red; la cola es una tabla de PostgreSQL. Etapa 2: RabbitMQ entre `envios` y `evaluacion` transporta el identificador del envío y el estado sigue en PostgreSQL; la entrega es al menos una vez y el resultado único por envío hace idempotente al worker. Del cliente a los servicios, HTTP por el gateway | Desacopla envíos y evaluación: se reciben envíos aunque los workers estén ocupados o caídos | Etapa 1: un envío en evaluación vuelve a la cola cuando su lease expira. Etapa 2: si el worker cae, el envío se reevalúa y el resultado único evita contarlo dos veces |
+| Manejo de fallas | Lease con renovación escrito por Evaluación; resultado único por envío (restricción de unicidad); tope fijo de compilación con reintento en worker limpio; identificador por intento de envío; en la etapa 2, timeouts y circuit breaker en las rutas del gateway y cola de mensajes muertos con tope de reintentos | Ningún envío se pierde ni cuenta dos veces | El envío vuelve a la cola; las fallas del servidor no penalizan al alumno |
 
 ---
 
@@ -270,7 +234,8 @@ Cada etapa vive en su propia rama, con su README y su docker-compose.yml:
 - **Aislamiento del código:** contenedor sin privilegios, sin red, sistema de archivos de solo lectura salvo un directorio temporal, y límites de memoria, CPU y procesos. Un contenedor nuevo por envío, destruido al terminar.
 - **Base de datos:** PostgreSQL en un solo contenedor con volumen persistente. Sin Patroni, etcd ni réplicas en la etapa 1. El esquema se crea con migraciones de Flyway (bitácora 1 y 2).
 - **Construcción:** Maven dentro de Docker, con un Dockerfile de dos etapas. No hace falta tener Java ni Maven instalados (bitácora 4).
-- **Cola:** la base de datos en la etapa 1. RabbitMQ o Kafka en la etapa 2, por decidir.
+- **Cola:** la base de datos en la etapa 1. RabbitMQ en la etapa 2 (bitácora 13).
+- **Gateway, directorio, balanceador y caché (etapa 2):** Spring Cloud Gateway, Eureka, nginx (bitácora 14) y Redis. La versión de Spring Cloud está por probar: la referencia (mexi-banco, rama `03-gateway-discovery-balanceo`) usa 2023.0.3 con Spring Boot 3.3.4 y avisa que desde 2023.0.4 el gateway falla con esa versión de Spring Framework; este proyecto usa Spring Boot 3.3.13.
 - **Front:** en la etapa 1, un front pequeño en HTML y JavaScript sin framework, como archivos estáticos que llaman a la API por HTTP, servidos por Spring Boot. Pantallas: selección de alumno de demo, subir envío y ver su estado, tabla de posiciones. El panel de la cola y la lista de envíos para organizadores quedan pendientes, y el inicio de sesión llega en una etapa posterior. En la etapa siguiente, cuando el front se separe del back, se reescribe en React.
 - **Contenedores:** todo en contenedores desde el inicio.
 - **Cómo se levanta:** Docker Compose en una computadora. Se entra por `http://localhost:8080`.
@@ -314,26 +279,35 @@ Cada etapa vive en su propia rama, con su README y su docker-compose.yml:
 | Cola en PostgreSQL en la etapa 1 | Cola con broker desde ahora | Una sola fuente de verdad; el broker llega en la etapa 2 |
 | Consistencia sobre disponibilidad (principio) | Seguir atendiendo con datos parciales | Un marcador incorrecto invalida el concurso; en la etapa 1 se traduce en detenerse hasta reiniciar |
 | Token validado al recibir el envío | Validar al ejecutar; consultar sesiones en cada subida | Rechaza a alumnos revocados en el momento de recibir |
-| Kafka para la división en servicios; el estado sigue en PostgreSQL | Kafka como única fuente de estado | Kafka no maneja leases ni reintentos por envío; PostgreSQL sí (la comparación con RabbitMQ sigue abierta, ver sección 10) |
+| RabbitMQ para la cola entre `envios` y `evaluacion`; el estado sigue en PostgreSQL (bitácora 13) | Kafka; RabbitMQ o Kafka como única fuente de estado | RabbitMQ es una cola con confirmación, reentrega y cola de mensajes muertos, que es lo que pide repartir envíos entre workers; Kafka es un log para releer eventos y no maneja leases ni reintentos por envío |
 | Java 21 con Spring Boot 3.3.x para el back | JDK puro; otros frameworks | Es la línea de la referencia de la materia; trae HTTP, acceso a base, validación y pruebas listas, y tiene Spring Cloud para las etapas de gateway y directorio |
 | Etapa 1: front pequeño en HTML y JavaScript sin framework. Etapa posterior: React | React desde la etapa 1; Thymeleaf | Dos días y un equipo que aprende: sin paso de compilación ni segundo lenguaje. React llega cuando el front se separa y el gateway exista |
 | Esquema con migraciones de Flyway en SQL; Hibernate no crea ni modifica tablas (bitácora 1) | `ddl-auto: update` como en mexi-banco; `schema.sql` en cada arranque | El esquema queda en SQL revisable, con unicidad explícita, y cada cambio es un archivo nuevo con su autor en el historial |
 | Cada dueño de datos escribe las migraciones de sus tablas, con versión por fecha y hora y aplicación fuera de orden (bitácora 2) | Solo Emiliano escribe migraciones; números consecutivos apartados en el chat | Trabajo en paralelo sin choques de versión; el cambio queda en el commit del dueño, como en la sección 6 |
+| Tres ramas de etapa: `main`, `01-monolito` y `02-separacion` (bitácora 12) | Una rama por tema, como mexi-banco | En mexi-banco cada rama siguió una clase; el equipo separa todo de una vez, y menos ramas son menos integraciones en pocos días |
+| Etapa 2 en pasos ordenados; el 24/11 lo que no corre de punta a punta se declara fuera (bitácora 12) | Separar todo a la vez; dejar el alcance abierto hasta la entrega | Si el tiempo falla, queda un sistema coherente y no uno partido a medias |
+| Spring Cloud Gateway en 2 réplicas, nginx por conexiones activas delante y Eureka como directorio (bitácora 14) | DNS interno de Docker como directorio; un solo contenedor de gateway | Eureka es el directorio del laboratorio S07 y permite ver cómo cae y se recupera una instancia; el DNS de Docker reparte por turnos, no revisa la salud y los clientes guardan la lista |
 
 ---
 
 ## 10. Preguntas abiertas y desacuerdos
 
-- **Alcance de la rama 01 en dos días:** el alcance mínimo de la sección 0 y el reparto de responsables deben confirmarse por el equipo antes del sábado 17. Si algo no entra, se documenta en el README de la rama.
 - **Límite de compilación:** el valor numérico del tope fijo sigue pendiente. En 01 hay una salvaguarda provisional de 10 s que no lo decide (bitácora 10).
 - **Límite del marcador en vivo:** 5 minutos está definido, pero debe confirmarse con una prueba de carga.
 - **Costo del contenedor por envío:** el arranque lo paga el servidor, no el alumno. Debe medirse en la prueba de carga.
 - **Problemas sin resolver:** definidos con valor cero. Falta confirmar si el organizador puede retirarlos antes del cierre.
 - **Corrección de casos de prueba:** la invalidación es automática. Si un caso privado estaba mal, el organizador no tiene forma de corregirlo a mano. Hay que decidir si se permite y cómo se registra.
-- **Cola entre servicios (etapa 2):** RabbitMQ o Kafka. Ambos dejan el estado en PostgreSQL; hay que comparar garantías, operación y peso en una laptop.
 - **Defensa:** hay que poder explicar cómo se resolvieron el gateway, el balanceo y el manejo de fallas, aunque el framework ya esté decidido.
-- **Redistribución y conmutación de workers:** las filas de la versión anterior (drenado gradual, conmutación automática) no aplican en la etapa 1. Quedan para etapas posteriores.
+- **Redistribución y conmutación de workers:** las filas de la versión anterior (drenado gradual, conmutación automática) no aplican en la etapa 1. Quedan para el final de la etapa 2 (agregar o retirar workers es la funcionalidad 7).
 - **Bono por orden de resolución:** propuesta de dar más puntaje a quien resuelve primero, en la línea de Codeforces. Quedó fuera de la etapa 1 y se revisará al final, junto con su relación con la dificultad de la sección 9.
+- **Datos entre servicios:** propuesta, una sola PostgreSQL con un esquema y un usuario por servicio, y lectura de tablas ajenas solo en modo lectura; `marcador` guarda su propio modelo, alimentado por mensajes de resultado. Alternativa: una base por servicio, con HTTP para toda lectura cruzada.
+- **Entre guardar y publicar:** si `envios` cae después de guardar y antes de publicar en RabbitMQ, el envío queda en cola sin mensaje. Propuesta: un barrido que republique los envíos en cola sin lease ni resultado. Alternativa: el patrón outbox. Falta decidir también si manda el ack de RabbitMQ o el lease; propuesta: el lease.
+- **Reintentos:** un tope de veces que se toma un envío y, al agotarlo, una cola de mensajes muertos visible para los organizadores, sin penalizar al alumno.
+- **Token:** dónde se valida (gateway o `envios`) y qué pasa si `identidad` o Redis caen. Propuesta: falla cerrada, coherente con "consistencia sobre disponibilidad".
+- **Caché del marcador:** un TTL menor que el atraso tolerado de 5 minutos, invalidación al llegar un resultado, una sola reconstrucción cuando expira la entrada más pedida, y qué pasa si Redis cae en la hora pico.
+- **Reloj:** propuesta, la hora de PostgreSQL (`now()`) como único reloj para ordenar envíos y vencer leases, y reloj monótono para medir el tiempo de ejecución; no hace falta un reloj lógico.
+- **Temas del curso sin decisión escrita:** sharding, respaldos y la pérdida de datos aceptada, configuración por variables de entorno, REST o gRPC entre servicios, Compose o Kubernetes. Kubernetes, MongoDB, blockchain y observabilidad con Prometheus, Grafana y Jaeger son opcionales de la etapa 2, no descartados.
+- **Qué revisa el profesor:** en qué rama se revisan el código y el reporte (preguntar en la Discussion #44), y si el front se reescribe en React dentro de la etapa 2.
 
 ---
 
@@ -354,4 +328,7 @@ Vacía en `main`, donde se definen las reglas del proyecto. La bitácora empieza
 | 9 | 17/10/2026 | Emiliano (@Delta2904) | Nuevo veredicto Runtime Error (`RUNTIME_ERROR`): el código pasa la revisión de sintaxis pero termina con error al ejecutarse. Cuenta como fallo y penaliza igual que Wrong Answer. Con WA, TLE y RE el alumno solo ve el veredicto, sin mensaje ni número de caso. Una migración nueva lo agrega a `resultados` | El PRD no decía qué pasa con un error en ejecución, y Wrong Answer lo escondería. No se muestra el mensaje porque el error de Python puede incluir la entrada de un caso privado. Se descartaron Wrong Answer con detalle y mostrar el stderr recortado | Secciones 0 (punto 4), 5 (historia 2) y 9 |
 | 10 | 17/10/2026 | Emiliano (@Delta2904) | Salvaguarda provisional de 10 s para la revisión de sintaxis (`py_compile`). Si se excede, no se guarda resultado: el envío vuelve a la cola cuando vence su lease y no se cobra al alumno. No es el tope de compilación de la sección 10, que sigue abierto | Con un solo worker, una revisión colgada detendría la evaluación de todos. Se descartaron usar el límite de tiempo del problema, porque mezcla compilación y ejecución, y no poner límite | Sección 10 |
 | 11 | 17/10/2026 | Emiliano (@Delta2904) | Ciclo del worker: toma el envío en cola más antiguo sin resultado ni lease vigente, con un lease que dura 10 s + (casos × límite de tiempo) + 10 s, sin renovación. Corre cada caso con `python3` en un directorio temporal y sin variables de entorno, y compara la salida ignorando los espacios al final de cada línea y las líneas vacías al final. Guarda el resultado solo si todavía tiene el lease. Si falla el servidor, por ejemplo porque no puede lanzar Python, no guarda nada y el envío vuelve a la cola al vencer el lease | Ningún envío se pierde ni cuenta dos veces, y una falla del servidor no penaliza (secciones 4 y 9). La renovación de lease y varios workers no entran en 01 | Secciones 6, 7 y 9 |
+| 12 | 12/11/2026 | Emiliano (@Delta2904) | Dos etapas, el monolito y la separación, y tres ramas: `main`, `01-monolito` y `02-separacion`. `01-monolito` se cierra el 15/11 y queda de respaldo. En la etapa 2 se avanza por pasos ordenados y el 24/11 lo que no corre de punta a punta se declara fuera. Cada integrante usa una rama personal con pull request, y los puntos de retorno son tags. Inicio de sesión, Administración y Redis para sesiones pasan al final de la etapa 2 | La separación de mexi-banco en seis ramas siguió las clases que se iban viendo; el equipo ya vio los temas y puede separar de una vez. Quedan 16 días y el 21/11 hay examen escrito y entrevista: un orden con corte deja un sistema coherente si lo demás no sale. Se descarta una rama por tema. Pendiente: confirmación de Diego, Enrique y Joshua | Secciones 0, 5, 6 y 9 |
+| 13 | 12/11/2026 | Emiliano (@Delta2904) | La cola entre `envios` y `evaluacion` es RabbitMQ. Reemplaza la fila de Kafka de la sección 9. El estado sigue en PostgreSQL | El equipo prefiere RabbitMQ. Es una cola con confirmación, reentrega y cola de mensajes muertos, que es lo que pide repartir envíos entre workers, y el laboratorio S09 ya trabajó con él. Se descarta Kafka: es un log para releer eventos y no maneja leases ni reintentos por envío | Secciones 6, 7, 8, 9 y 10 |
+| 14 | 12/11/2026 | Emiliano (@Delta2904) | Gateway, directorio y balanceador de la etapa 2: Spring Cloud Gateway en 2 réplicas, nginx con `least_conn` delante y Eureka como directorio | Eureka es el directorio del laboratorio S07 y permite probar qué pasa cuando una instancia muere sin avisar. nginx es la herramienta del balanceador y Spring Cloud Gateway el framework de Java que estaban por decidir. Se descarta el DNS interno de Docker como directorio: reparte por turnos, no revisa la salud y los clientes guardan la lista. La versión de Spring Cloud queda por probar | Secciones 7, 8 y 9 |
 

@@ -29,7 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
  *       a partir de consultas sobre envíos, resultados, cuentas y problemas.</li>
  * </ul>
  *
- * <p>Reglas de la tabla provisional (PRD secciones 0, 5, 9 y bitácora 6):
+ * <p>Reglas de la tabla provisional:
  * <ul>
  *   <li>Penalización por problema: minuto de la primera aceptación respecto al inicio del concurso,
  *       más 5 minutos por cada fallo previo a esa aceptación.</li>
@@ -41,7 +41,7 @@ import org.springframework.web.server.ResponseStatusException;
  *   <li>Aviso a organizadores si el retraso de envíos sin evaluar supera 5 minutos (300 s).</li>
  * </ul>
  *
- * <p>Dueño de datos (PRD sección 6): en la etapa 1 la tabla de posiciones no escribe
+ * <p>Dueño de datos: en la etapa 1 la tabla de posiciones no escribe
  * ninguna tabla, solo lee {@code envios}, {@code resultados}, {@code problemas},
  * {@code cuentas} y {@code concursos}.
  */
@@ -214,7 +214,7 @@ public class TablaPosicionesController {
             participantes.add(estado);
         }
 
-        // 7. Ordenar participantes según la regla de la bitácora 6
+        // 7. Ordenar participantes: resueltos, penalización y hora del último aceptado
         Comparator<EstadoParticipante> comparador = (a, b) -> {
             // (1) Mayor número de resueltos
             int c = Integer.compare(b.resueltos, a.resueltos);
