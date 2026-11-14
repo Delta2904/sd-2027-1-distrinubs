@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   app:
-    # La aplicación incluye el worker de evaluación y Python 3.
+    # La aplicación incluye los workers de evaluación, la siembra y Python 3.
     build: .
     ports:
       # Si el 8080 ya está ocupado: APP_PUERTO=8081 docker compose up
@@ -35,6 +35,10 @@ services:
       DB_NAME: distrinubs
       DB_USER: distrinubs
       DB_PASSWORD: distrinubs
+      # Hilos de evaluación dentro de la aplicación.
+      EVALUACION_WORKERS: ${EVALUACION_WORKERS:-2}
+      # Solo para la prueba de carga: cuentas extra carga001, carga002, ...
+      SIEMBRA_CUENTAS_CARGA: ${SIEMBRA_CUENTAS_CARGA:-0}
     depends_on:
       # La aplicación arranca cuando la base ya acepta conexiones, no antes.
       db:

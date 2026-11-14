@@ -9,8 +9,8 @@
 --
 -- En la etapa 1 el límite de memoria se guarda, pero no se aplica.
 --
--- Uso, con `docker compose up` ya corriendo (desde la raíz del repositorio):
---   docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-concursos.sql
+-- Lo ejecuta la aplicación al arrancar (SiembraConcursos, del paquete concursos), después de
+-- las migraciones. No hace falta correrlo a mano.
 
 -- 1. Concurso "Distrinubs Round 1" en estado ABIERTO
 INSERT INTO concursos (id, nombre, inicio, fin, estado) VALUES

@@ -26,37 +26,43 @@ Requisito: Docker con Docker Compose. No hace falta tener Java, Maven ni Python 
 ```bash
 git checkout 01-monolito
 docker compose up -d --build
-
-# Siembra (idempotente: se puede correr varias veces sin duplicar)
-docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-cuentas.sql
-docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-concursos.sql
 ```
 
+Con eso basta: al arrancar, la aplicación crea el esquema y siembra las cuentas de demo y el concurso. No hay comandos extra, y funciona igual en bash y en PowerShell.
+
 - **Entrada:** `http://localhost:8080`. Salud de la aplicación: `http://localhost:8080/actuator/health`.
+- **Workers de evaluación:** 2 por omisión. Se cambia con `EVALUACION_WORKERS`: `EVALUACION_WORKERS=4 docker compose up -d` en bash, o `$env:EVALUACION_WORKERS=4; docker compose up -d` en PowerShell.
 - **Puerto ocupado:** si otro proyecto usa el 8080, levanta con otro puerto: `APP_PUERTO=8081 docker compose up -d` en bash, o `$env:APP_PUERTO=8081; docker compose up -d` en PowerShell. La base se publica en `127.0.0.1:5432` y se cambia igual, con `DB_PUERTO_LOCAL`.
 - **Empezar de cero:** `docker compose down -v` borra el volumen de la base, incluidos envíos y resultados. Sin `-v`, los datos se conservan.
-- **Pruebas unitarias**, sin Java instalado: `docker build --target construccion -t distrinubs-pruebas .` y luego `docker run --rm distrinubs-pruebas mvn -B -q test`.
+- **Pruebas**, sin Java instalado: `docker build --target construccion -t distrinubs-pruebas .` y luego `docker run --rm distrinubs-pruebas mvn -B -q test`. Las pruebas de la siembra, del tope de reintentos y de varios workers levantan un PostgreSQL 17 embebido dentro del contenedor; no necesitan la base de Compose.
 
 ## Scripts
 
+En Windows el comando es `python` en lugar de `python3`.
+
 | Script | Comando | Qué hace |
 |---|---|---|
-| `scripts/siembra-cuentas.sql` | `docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-cuentas.sql` | Carga 5 cuentas de demo (`alumno1` a `alumno5`) con ids fijos del 1 al 5 |
-| `scripts/siembra-concursos.sql` | `docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-concursos.sql` | Carga "Distrinubs Round 1" abierto, con el problema A ("Suma simple") y 3 casos de prueba |
-| `scripts/demo.py` | `python3 scripts/demo.py`, o sin Python instalado: `docker compose exec -T app python3 - < scripts/demo.py` | Recorre los puntos 1 a 6 del alcance contra la API: concurso, cuentas, envío con reintento, Wrong Answer, Accepted y tabla. Necesita las dos siembras |
+| `scripts/demo.py` | `python3 scripts/demo.py` | Recorre los puntos 1 a 6 del alcance contra la API: concurso, cuentas, envío con reintento, Wrong Answer, Accepted y tabla |
+| `scripts/carga.py` | `python3 scripts/carga.py --escenario rafaga` | Prueba de carga del marcador: simula 200 alumnos y mide cuánto tarda cada envío en aparecer evaluado en la tabla. Ver "Prueba de carga del marcador" |
+
+Sin Python instalado, `demo.py` corre dentro del contenedor: `docker compose exec -T app python3 - < scripts/demo.py` en bash, o `Get-Content scripts/demo.py | docker compose exec -T app python3 -` en PowerShell.
+
+La siembra ya no es un script: son `src/main/resources/siembra/cuentas.sql` y `concursos.sql`, que la aplicación ejecuta al arrancar. Se apaga con `siembra.activa: false`.
 
 ## Qué hace la etapa 1
 
-Se verificó de punta a punta el 17/10/2026 con `scripts/demo.py`. Los veredictos que el script no cubre se probaron a mano.
+Se verificó de punta a punta el 12/11/2026: `docker compose down -v`, `docker compose up -d --build` y `scripts/demo.py`, sin pasos intermedios.
 
-1. Concurso "Distrinubs Round 1" abierto, con un problema y tres casos de prueba, cargado por la siembra.
+1. Concurso "Distrinubs Round 1" abierto, con un problema y tres casos de prueba, cargado por la siembra automática al arrancar.
 2. Identidad de demo: el alumno se elige de una lista de cuentas de prueba y su id viaja con el envío.
 3. Subir envío: responde "recibido" con su identificador solo después de guardarlo. Un reintento con el mismo `intentoId` devuelve el mismo envío.
-4. Evaluación con un solo worker: toma el envío con un lease, corre el código en Python 3 con límite de tiempo y guarda el veredicto: Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error o error de compilación. Si la aplicación se cae a media evaluación, el envío se retoma cuando vence su lease y se evalúa una sola vez.
+4. Evaluación con varios workers (2 por omisión), que son hilos de la misma aplicación sobre la misma cola: cada uno toma un envío con un lease, corre el código en Python 3 con límite de tiempo y guarda el veredicto: Accepted, Wrong Answer, Time Limit Exceeded, Runtime Error o error de compilación. Si la aplicación se cae a media evaluación, el envío se retoma cuando vence su lease y se evalúa una sola vez.
+   - **Tope de reintentos:** un envío se toma como máximo 3 veces. Si el servidor no logra evaluarlo, queda con `ERROR_SERVIDOR`, que no cuenta como fallo ni penaliza, y el alumno ve que puede volver a enviarlo.
 5. Ver el estado ("en cola", "evaluando", "evaluado") y el veredicto del envío.
 6. Tabla provisional con problemas resueltos y penalización: minuto de la aceptación más 5 minutos por cada fallo previo.
 7. Front pequeño en HTML y JavaScript: elegir alumno, subir envío, ver estado y tabla.
 8. Script de demostración que recorre los puntos 1 a 6.
+9. Script de prueba de carga del marcador con 200 alumnos.
 
 ## Qué no hace la etapa 1
 
@@ -64,7 +70,8 @@ Se verificó de punta a punta el 17/10/2026 con `scripts/demo.py`. Los veredicto
 - Sandbox con un contenedor nuevo por envío.
 - Varios lenguajes: solo Python 3.
 - Límite de memoria: se guarda en el problema, pero no se aplica.
-- Varios workers y renovación de lease.
+- Workers en procesos o contenedores separados: en 01 son hilos de la misma aplicación.
+- Renovación de lease: el lease es fijo.
 - Evaluación final con todos los casos e invalidación al cierre. En vivo solo corren los casos del marcador provisional.
 - Verificación de la solución de referencia: los casos se revisaron a mano.
 - Dificultad por resueltos y desempate completo.
@@ -73,8 +80,9 @@ Se verificó de punta a punta el 17/10/2026 con `scripts/demo.py`. Los veredicto
 ## Pendiente
 
 - El tope de compilación, que sigue sin definirse. En 01 hay una salvaguarda provisional de 10 s que no lo decide.
-- La recompilación en un worker limpio. Hoy, un envío cuya revisión de sintaxis se cuelga se reintenta cada vez que vence su lease, sin límite de intentos.
-- La prueba de carga del marcador en vivo, que debe confirmar el límite de 5 minutos.
+- La recompilación en un worker limpio. Hoy, un envío cuya revisión de sintaxis se cuelga se reintenta en cualquier worker, hasta el tope de 3 tomas.
+- Repetir la prueba de carga con sandbox: el contenedor por envío no existe en 01 y su costo de arranque no está medido.
+- Una vista para organizadores de los envíos que quedaron con `ERROR_SERVIDOR`. Hoy solo se ven en el log.
 - La evaluación final al cierre, con todos los casos, y la invalidación.
 - Flyway 10.10, el que trae Spring Boot 3.3, avisa al arrancar que no probó PostgreSQL 17. Funciona, pero queda revisar la versión.
 
@@ -89,7 +97,7 @@ Se verificó de punta a punta el 17/10/2026 con `scripts/demo.py`. Los veredicto
 
   El código todavía tiene red y puede leer los archivos de la aplicación. No se presenta como condición de producción.
 - **Una sola máquina, punto único de falla.** Si la computadora se apaga o se reinicia, el sistema no responde hasta que vuelva a arrancar. Lo ya guardado sobrevive: los envíos con lease vencido se retoman y los resultados no se duplican.
-- **Excepción temporal en la siembra de cuentas.** La tabla `cuentas` es de Inicio de sesión, pero en 01 ese módulo no existe y la escribe `scripts/siembra-cuentas.sql`.
+- **Excepción temporal en la siembra de cuentas.** La tabla `cuentas` es de Inicio de sesión, pero en 01 no hay inicio de sesión: las cuentas solo las escribe la siembra de ese paquete al arrancar (`SiembraCuentasDemo`), incluidas las cuentas extra de la prueba de carga.
 - **Accepted solo con el subconjunto.** Sin evaluación final, un envío que falla solo un caso privado queda como Accepted en 01.
 
 ## Estructura de paquetes
@@ -98,7 +106,7 @@ Un paquete por cada uno de los siete módulos, dentro de `mx.distrinubs`. Los m�
 
 | Paquete | Módulo | Responsable en 01 | Escribe |
 |---|---|---|---|
-| `iniciosesion` | Inicio de sesión | Diego (cuentas de demo) | `cuentas` (en 01, solo la siembra) |
+| `iniciosesion` | Inicio de sesión | Diego (cuentas de demo) | `cuentas` (en 01, solo su siembra al arrancar) |
 | `envios` | Envíos | Enrique | `envios` |
 | `tablaposiciones` | Tabla de posiciones | Joshua | Nada: el marcador se calcula al consultarlo |
 | `evaluacion` | Evaluación de código | Emiliano | `leases_evaluacion`, `resultados` |
@@ -113,6 +121,7 @@ El front está en `src/main/resources/static` y lo sirve Spring Boot.
 PostgreSQL 17 en un contenedor, con el volumen persistente `distrinubs_datos`. El esquema lo crea Flyway al arrancar la aplicación. Hibernate no crea ni modifica tablas.
 
 - **Migraciones:** cada dueño de datos escribe las de sus tablas, con el nombre `V<AAAAMMDD>_<HHMM>__<tabla>_<cambio>.sql`. Una migración ya aplicada no se edita: se agrega otra.
+- **Siembra:** cada módulo dueño ejecuta su SQL al arrancar, después de las migraciones y antes de abrir el puerto. Es idempotente.
 - **Ids de la siembra:** `cuentas`, `concursos`, `problemas` y `casos_prueba` reciben ids fijos del 1 al 999 y se hace upsert por id. Sus secuencias empiezan en 1000, así lo que inserte la aplicación no choca con la siembra. `envios`, `leases_evaluacion` y `resultados` no se siembran: su id siempre lo pone la base.
 - **Restricciones que sostienen las reglas del negocio:**
   - `envios_un_envio_por_intento (cuenta_id, id_intento)`: un reintento no crea un segundo envío.
@@ -125,12 +134,16 @@ PostgreSQL 17 en un contenedor, con el volumen persistente `distrinubs_datos`. E
 
 Parte de Emiliano (@Delta2904), en el paquete `evaluacion`.
 
-- **Dónde corre:** dentro de la aplicación, como un componente programado. No es un contenedor aparte. Revisa la cola cada segundo y la vacía antes de volver a esperar. Hay un solo hilo, así que hay un solo worker.
+- **Dónde corre:** dentro de la aplicación. No es un contenedor aparte. Hay `evaluacion.workers` hilos (2 por omisión), cada uno con su nombre de worker. Cada uno revisa la cola cada segundo y la vacía antes de volver a esperar. No se coordinan entre sí: solo comparten la cola de PostgreSQL.
 - **Cómo toma un envío:**
-  - Toma el envío en estado `EN_COLA` más antiguo que no tenga resultado ni lease vigente.
+  - Toma el envío en estado `EN_COLA` más antiguo que no tenga resultado, lease vigente ni las tomas agotadas.
   - Lo marca con un lease en `leases_evaluacion` que dura 10 s + (casos × límite de tiempo) + 10 s, sin renovación.
   - Si el lease anterior ya venció, retoma la misma fila y suma `veces_tomado`.
   - "Evaluando" no se guarda en ningún lado: Envíos lo deriva del lease vigente. Evaluación no llama a Envíos.
+- **Varios workers sobre la misma cola:**
+  - La toma bloquea un instante la fila del envío candidato con `FOR NO KEY UPDATE ... SKIP LOCKED`, así cada worker elige un envío distinto. Es un lock, no una escritura: `envios` la sigue escribiendo solo Envíos.
+  - Aun así dos workers pueden elegir el mismo envío. La unicidad del lease hace que solo uno lo tome; el otro no toma nada.
+  - Un worker que pierde esa carrera lo distingue de una cola vacía y lo intenta de nuevo sin dormir. Antes lo leía como cola vacía: en la prueba, con 4 workers y 200 envíos, uno solo hizo todo el trabajo.
 - **Cómo juzga:**
   1. Revisa la sintaxis con `py_compile`. Si falla, el veredicto es error de compilación y el mensaje queda en `detalle`.
   2. Corre los casos del marcador provisional (o todos, si el problema no marcó ninguno) en orden, cada uno con el límite de tiempo del problema.
@@ -141,7 +154,57 @@ Parte de Emiliano (@Delta2904), en el paquete `evaluacion`.
   `tiempo_ms` es el mayor tiempo entre los casos e incluye el arranque de Python.
 - **Cómo guarda:** escribe la fila de `resultados` solo si todavía tiene el lease que tomó: mismo worker y mismo `veces_tomado`. La unicidad por envío impide un segundo resultado.
 - **Si falla el servidor:** si no puede lanzar Python, si la revisión de sintaxis pasa de 10 s o si el problema no tiene casos, no guarda resultado. El envío vuelve a la cola cuando vence el lease y no se penaliza al alumno.
-- **Configuración** (`application.yml`, sección `evaluacion`): `activa`, `python`, `intervalo-ms`, `salvaguarda-compilacion-ms` y `margen-lease-ms`.
+- **Tope de reintentos:** un envío se toma como máximo `evaluacion.max-tomas` veces (3). Cuenta toda toma sin resultado, también una caída de la aplicación a media evaluación. Cuando vence el lease de la última toma, Evaluación guarda el veredicto `ERROR_SERVIDOR`. La tabla no lo cuenta como fallo y el front le dice al alumno que vuelva a enviar.
+- **Configuración** (`application.yml`, sección `evaluacion`): `activa`, `python`, `workers`, `max-tomas`, `intervalo-ms`, `salvaguarda-compilacion-ms` y `margen-lease-ms`.
+- **Pruebas:** `VariosWorkersTest` (4 workers, 200 envíos: una pasada vacía la cola, cada envío se evalúa una vez y el trabajo se reparte) y `TopeReintentosTest`, las dos contra un PostgreSQL real embebido.
+
+## Prueba de carga del marcador
+
+`scripts/carga.py` simula un concurso de 200 alumnos y mide el retraso del marcador: el tiempo entre que el servidor responde "recibido" a un envío y el primer sondeo de la tabla de posiciones en que la fila del alumno ya lo refleja. El objetivo es que quede bajo 5 minutos (300 s).
+
+**Resultado: cumple.** En el peor caso medido, 800 envíos de golpe con un solo worker, el envío más lento tardó 104 s en aparecer en la tabla. Con los 2 workers por omisión tardó 44 s.
+
+Medido el 12/11/2026 en una computadora con Docker Desktop (32 CPU y 16 GB asignados). Cada alumno manda 3 envíos fallidos y al final uno aceptado: 800 envíos por corrida.
+
+| Escenario | Workers | Duración | Envíos/s | Retraso p50 | Retraso p95 | Retraso máximo | Máximo según el servidor |
+|---|---|---|---|---|---|---|---|
+| Ráfaga | 1 | 105 s | 7.6 | 53.6 s | 96.7 s | 104.2 s | 103 s |
+| Ráfaga | 2 | 45 s | 18.0 | 25.9 s | 42.8 s | 43.8 s | 43 s |
+| Ráfaga | 4 | 23 s | 34.9 | 13.3 s | 20.9 s | 21.4 s | 20 s |
+| Sostenido | 1 | 301 s | 2.7 | 1.0 s | 2.1 s | 3.4 s | 2 s |
+| Sostenido | 2 | 302 s | 2.7 | 0.8 s | 1.7 s | 2.5 s | 1 s |
+| Sostenido | 4 | 302 s | 2.7 | 0.8 s | 1.6 s | 2.4 s | 1 s |
+
+- **Ráfaga:** los 200 alumnos mandan sus 4 envíos a la vez. Es el peor caso.
+- **Sostenido:** los envíos se reparten en 5 minutos y cada alumno espera su veredicto antes de mandar el siguiente.
+- **Mezcla de los fallidos:** 70 % Wrong Answer y 10 % cada uno de Runtime Error, error de compilación y Time Limit Exceeded. Cada Time Limit Exceeded ocupa a un worker 1 s completo.
+- **Lecturas simuladas:** cada alumno consulta su último envío cada segundo y la tabla cada 5 s, como el front.
+- **En las seis corridas:** los 800 envíos quedaron con un solo resultado, ninguno con `ERROR_SERVIDOR`, sin errores HTTP y sin aviso a organizadores. La tabla respondió en menos de 0.04 s.
+- **"Máximo según el servidor"** es el `retrasoSegundos` que reporta la propia tabla: la edad del envío sin evaluar más antiguo.
+
+Lo que esta prueba no cubre:
+
+- **Sin sandbox.** El código corre como proceso hijo. El contenedor por envío, que no existe en 01, agregará su costo de arranque a cada evaluación.
+- **Un problema trivial con 2 casos en vivo.** Con más casos o límites de tiempo más largos, cada evaluación tarda más y el retraso crece en proporción.
+- **Una computadora con 32 CPU.** En una laptop con menos núcleos, 4 workers pueden rendir menos que aquí.
+- **Resolución de 0.5 s:** es cada cuánto se sondea la tabla para medir.
+- **Un lease retomado sin explicar.** En la primera ráfaga con 1 worker, un envío se tomó dos veces porque su lease venció. Terminó con un solo resultado y no penalizó de más. Al repetir la corrida no volvió a pasar (retraso máximo de 87 s) y la causa no quedó identificada.
+
+Cómo repetirla, desde cero porque necesita cuentas de carga sin usar:
+
+```bash
+# bash
+docker compose down -v && SIEMBRA_CUENTAS_CARGA=200 docker compose up -d --build
+python3 scripts/carga.py --escenario rafaga
+```
+
+```powershell
+# PowerShell
+docker compose down -v; $env:SIEMBRA_CUENTAS_CARGA=200; docker compose up -d --build
+python scripts/carga.py --escenario rafaga
+```
+
+Para el otro escenario, `--escenario sostenido`. Para cambiar los workers, `EVALUACION_WORKERS`. Las cuentas de carga se quedan en la base hasta el siguiente `docker compose down -v`; en PowerShell hay que quitar la variable después con `Remove-Item Env:SIEMBRA_CUENTAS_CARGA`.
 
 ## Documentación
 
@@ -172,15 +235,12 @@ Parte de Enrique (@Quique1409).
 - Envíos es el único dueño que escribe en `envios`.
 - No escribe leases ni resultados (pertenecen a Evaluación).
 - Solo lee de `cuentas`, `problemas`, `leases_evaluacion` y `resultados`.
+
 ## Etapa 01-monolito: front, cuentas de prueba y demostración
 
 Parte de Diego (@diegocontrras). Con `docker compose up` corriendo, desde la raíz del repositorio:
 
-**1. Sembrar las cuentas de demo** (idempotente: ids fijos del 1 al 5, se puede correr varias veces):
-
-```bash
-docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-cuentas.sql
-```
+**1. Cuentas de demo:** `alumno1` a `alumno5`, con ids fijos del 1 al 5. Las siembra la aplicación al arrancar; no hay que correr nada.
 
 **2. Front:** `http://localhost:8080`. HTML y JavaScript sin framework, servido por Spring Boot desde `src/main/resources/static`. Pantallas: elegir alumno de demo, subir envío, ver estado y veredicto, y tabla de posiciones.
 
@@ -190,14 +250,14 @@ docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < 
 python3 scripts/demo.py
 ```
 
-Las soluciones por omisión del script suman dos enteros. Si el problema sembrado es otro, pasa las tuyas con `--correcta` y `--incorrecta`. Requiere el concurso sembrado y el worker de evaluación activo.
+Las soluciones por omisión del script suman dos enteros. Si el problema sembrado es otro, pasa las tuyas con `--correcta` y `--incorrecta`. En Windows el comando es `python scripts/demo.py`.
 
 **Endpoint que expone esta parte:** `GET /api/cuentas-demo`, con `id`, `usuario` y `nombre` de cada cuenta.
 
 ### Riesgos declarados
 
 - **Sin autenticación.** La identidad de demo no tiene contraseña ni token: cualquiera puede enviar con cualquier cuenta de demo.
-- **Excepción temporal a la regla del dueño de datos.** La tabla `cuentas` es de Inicio de sesión, pero en 01 ese módulo no existe y `scripts/siembra-cuentas.sql` la escribe.
+- **Excepción temporal a la regla del dueño de datos.** La tabla `cuentas` es de Inicio de sesión, pero en 01 no hay inicio de sesión y la escribe la siembra de ese paquete al arrancar.
 - **Posible envío duplicado.** Si el servidor guarda un envío pero la respuesta se pierde en todos los reintentos automáticos, el clic siguiente del alumno genera un `intentoId` nuevo y crea otro envío. Los reintentos automáticos sí reutilizan el mismo `intentoId`.
 - **Contrato con otros módulos por confirmar.** El front y el script asumen el JSON de `POST/GET /api/envios`, `/api/concursos/activo` y `/api/concursos/activo/tabla` según los endpoints descritos en este README, y leen las respuestas de forma tolerante hasta que Enrique y Joshua fijen los nombres de campos.
 
@@ -205,13 +265,7 @@ Las soluciones por omisión del script suman dos enteros. Si el problema sembrad
 
 Parte de Joshua (@JoshRozam). Con `docker compose up` corriendo, desde la raíz del repositorio:
 
-**1. Sembrar el concurso y problemas** (idempotente: ids fijos, se puede correr varias veces sin duplicar ni romper nada):
-
-```bash
-docker compose exec -T db psql -U distrinubs -d distrinubs -v ON_ERROR_STOP=1 < scripts/siembra-concursos.sql
-```
-
-Carga "Distrinubs Round 1" en estado `ABIERTO` con el problema A ("Suma simple", límite 1000 ms, 256 MB y 100 puntos base) y 3 casos de prueba (casos 1 y 2 en el marcador provisional, caso 3 privado). En la etapa 1 el límite de memoria se guarda, pero no se aplica.
+**1. Concurso y problemas:** los siembra la aplicación al arrancar (`SiembraConcursos`, idempotente, con ids fijos). Carga "Distrinubs Round 1" en estado `ABIERTO` con el problema A ("Suma simple", límite 1000 ms, 256 MB y 100 puntos base) y 3 casos de prueba (casos 1 y 2 en el marcador provisional, caso 3 privado). En la etapa 1 el límite de memoria se guarda, pero no se aplica.
 
 **2. Endpoints implementados:**
 
@@ -225,6 +279,7 @@ Carga "Distrinubs Round 1" en estado `ABIERTO` con el problema A ("Suma simple",
      - Minuto de la primera aceptación (desde el inicio del concurso) más 5 minutos por cada fallo previo a esa aceptación.
      - Los envíos posteriores a la primera aceptación no penalizan.
      - Problemas no resueltos no suman penalización.
+     - Un envío con `ERROR_SERVIDOR` no cuenta como fallo: el servidor no pudo evaluarlo.
    - **Orden y desempate:**
      1. Problemas resueltos descendente (`resueltos DESC`).
      2. Menor penalización total ascendente (`penalizacion ASC`).

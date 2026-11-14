@@ -131,6 +131,41 @@ class TablaPosicionesControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/concursos/activo/tabla: un envío con ERROR_SERVIDOR no cuenta como fallo ni penaliza")
+    void obtenerTabla_ErrorServidorNoPenaliza() throws Exception {
+        Instant inicio = Instant.parse("2026-10-17T00:00:00Z");
+        when(jdbc.query(contains("FROM concursos"), any(RowMapper.class)))
+                .thenReturn(List.of(new TablaPosicionesController.ConcursoInfo(
+                        1L, "Distrinubs Round 1", inicio, inicio.plusSeconds(5 * 3600))));
+        when(jdbc.query(contains("MIN(e.llegada_en)"), any(RowMapper.class), eq(1L)))
+                .thenReturn(Collections.emptyList());
+        when(jdbc.query(contains("FROM problemas"), any(RowMapper.class), eq(1L)))
+                .thenReturn(List.of(new TablaPosicionesController.ProblemaInfo(10L, "A", "Problema A", 100)));
+        when(jdbc.query(contains("FROM cuentas"), any(RowMapper.class)))
+                .thenReturn(List.of(
+                        new TablaPosicionesController.CuentaInfo(1L, "alumno1", "Alumno Uno"),
+                        new TablaPosicionesController.CuentaInfo(2L, "alumno2", "Alumno Dos")));
+
+        // alumno1: WA (min 5), ERROR_SERVIDOR (min 8), ACCEPTED (min 14) -> 14 + 1*5 = 19, no 24.
+        // alumno2: solo ERROR_SERVIDOR -> sin fallos.
+        when(jdbc.query(contains("r.veredicto"), any(RowMapper.class), eq(1L)))
+                .thenReturn(List.of(
+                        new TablaPosicionesController.EnvioEvaluado(101L, 1L, 10L, inicio.plusSeconds(5 * 60), "WRONG_ANSWER"),
+                        new TablaPosicionesController.EnvioEvaluado(102L, 1L, 10L, inicio.plusSeconds(8 * 60), "ERROR_SERVIDOR"),
+                        new TablaPosicionesController.EnvioEvaluado(103L, 1L, 10L, inicio.plusSeconds(14 * 60), "ACCEPTED"),
+                        new TablaPosicionesController.EnvioEvaluado(104L, 2L, 10L, inicio.plusSeconds(9 * 60), "ERROR_SERVIDOR")));
+
+        mockMvc.perform(get("/api/concursos/activo/tabla"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.filas[0].usuario", equalTo("alumno1")))
+                .andExpect(jsonPath("$.filas[0].resueltos", equalTo(1)))
+                .andExpect(jsonPath("$.filas[0].penalizacion", equalTo(19)))
+                .andExpect(jsonPath("$.filas[1].usuario", equalTo("alumno2")))
+                .andExpect(jsonPath("$.filas[1].penalizacion", equalTo(0)))
+                .andExpect(jsonPath("$.filas[1].A", equalTo("-")));
+    }
+
+    @Test
     @DisplayName("GET /api/concursos/activo/tabla: activa avisoOrganizadores si el retraso supera 5 minutos")
     void obtenerTabla_AvisoRetrasoOrganizadores() throws Exception {
         Instant inicio = Instant.parse("2026-10-17T00:00:00Z");

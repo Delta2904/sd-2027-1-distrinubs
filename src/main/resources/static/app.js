@@ -58,7 +58,7 @@ async function cargarCuentas() {
     const cuentas = await obtenerJson('/api/cuentas-demo');
     select.replaceChildren();
     if (cuentas.length === 0) {
-      select.add(new Option('(sin cuentas: corre la siembra)', ''));
+      select.add(new Option('(sin cuentas: revisa que la siembra esté activa)', ''));
       return;
     }
     for (const c of cuentas) select.add(new Option(`${c.nombre} (${c.usuario})`, c.id));
@@ -175,6 +175,12 @@ async function sondearEstado(envioId) {
     try {
       const d = await obtenerJson(`/api/envios/${envioId}`);
       const veredicto = extraerVeredicto(d);
+      if (normalizar(veredicto) === 'error servidor') {
+        // Falla del servidor, no del alumno: no cuenta como intento.
+        ponerMensaje(salida, `Envío ${envioId}: el servidor no pudo evaluarlo. No cuenta como intento: vuelve a enviarlo.`, 'error');
+        cargarTabla();
+        return;
+      }
       if (veredicto) {
         const tiempo = d.tiempoMs ?? d.resultado?.tiempoMs;
         const extra = tiempo != null ? ` (${tiempo} ms)` : '';

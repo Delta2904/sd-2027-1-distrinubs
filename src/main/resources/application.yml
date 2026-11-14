@@ -22,10 +22,21 @@ spring:
     # una versión más vieja que llega después se aplica.
     out-of-order: true
 
-# Worker de evaluación.
+# Siembra automática al arrancar: cada módulo dueño carga sus datos de demo.
+siembra:
+  activa: true
+  # Cuentas extra para la prueba de carga (carga001, carga002, ...). 0 = ninguna.
+  cuentas-carga: ${SIEMBRA_CUENTAS_CARGA:0}
+
+# Workers de evaluación.
 evaluacion:
   activa: true
   python: python3
+  # Hilos que evalúan dentro de la misma aplicación, sobre la misma cola.
+  workers: ${EVALUACION_WORKERS:2}
+  # Veces que se toma un envío antes de darlo por no evaluable (ERROR_SERVIDOR).
+  # Cuenta toda toma sin resultado; no penaliza al alumno.
+  max-tomas: 3
   intervalo-ms: 1000
   # Salvaguarda provisional: todavía no hay un tope de compilación definido.
   salvaguarda-compilacion-ms: 10000
