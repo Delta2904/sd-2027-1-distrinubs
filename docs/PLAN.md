@@ -31,12 +31,12 @@ Pasos en orden. Cada uno deja el sistema funcionando y se comprueba con `scripts
 | Paso | Qué | Quién |
 |---|---|---|
 | 1 | `envios`, `evaluacion` y `concursos` como servicios en Compose, con RabbitMQ entre envíos y evaluación y varios workers | Enrique, Emiliano, Joshua |
-| 2 | Gateway en 2 réplicas, nginx delante y Eureka | Diego |
-| 3 | Autenticación: servicio `identidad` (inicio de sesión, token, bloqueo), validación en el gateway y en la subida, y pantalla de inicio de sesión | Enrique y Diego |
-| 4 | Demo de fallas: matar un worker a media evaluación, apagar una réplica del gateway y ver salir de Eureka a una instancia caída. **Los pasos 1, 2 y 4 son el mínimo** | Diego, con todos |
+| 2 | Gateway en 2 réplicas, nginx delante y Eureka; el `docker-compose.yml` de la etapa 2 | Joshua (gateway) y Emiliano (nginx, Eureka y Compose) |
+| 3 | Autenticación: servicio `identidad` (inicio de sesión, token, bloqueo), validación en el gateway y en la subida, y pantalla de inicio de sesión | Enrique (servicio y validación) y Diego (pantalla) |
+| 4 | Demo de fallas: matar un worker a media evaluación, apagar una réplica del gateway y ver salir de Eureka a una instancia caída. **Los pasos 1, 2 y 4 son el mínimo** | Diego (el script), con todos |
 | 5 | `marcador` aparte, con Redis y mensajes de resultado | Joshua y Emiliano |
-| 6 | Circuit breaker y timeouts en las rutas del gateway; cola de mensajes muertos con tope de reintentos | Diego y Enrique |
-| 7 | Observabilidad mínima: id de correlación en los logs, Actuator y una vista del estado de los servicios | Diego |
+| 6 | Circuit breaker y timeouts en las rutas del gateway; cola de mensajes muertos con tope de reintentos | Emiliano (circuit breaker, timeouts y cola de mensajes muertos) y Enrique (productor de la cola) |
+| 7 | Observabilidad mínima: id de correlación en los logs, Actuator y una vista del estado de los servicios | Diego, con cada dueño en su servicio |
 | 8 | Lenguajes: C++, C, Java y JavaScript, además de Python 3 | Emiliano, con Diego en el front |
 | 9 | Si alcanza: sandbox por envío, límite de memoria, evaluación final, interfaz de organizador y saga de cierre | Emiliano y Joshua |
 
@@ -48,10 +48,10 @@ Propuesta del 14/11 para confirmar en la reunión del 15/11. Cada quien es dueñ
 
 | Quién | Área | Tema que defiende |
 |---|---|---|
-| Emiliano | `evaluacion` y la integración | Fallas y reentrega |
-| Enrique | `envios`, mensajería e `identidad` | Operaciones entre servicios |
-| Joshua | `concursos` y `marcador`, con Redis | Datos y consistencia |
-| Diego | `gateway`, nginx, Eureka, el front y la demo de fallas | Gateway, directorio y balanceador |
+| Emiliano | `evaluacion`, nginx, Eureka, el `docker-compose.yml`, el circuit breaker y la integración | Fallas, reentrega, directorio, balanceador y datos |
+| Enrique | `envios`, mensajería, `identidad` y el filtro del token | Operaciones entre servicios y autenticación |
+| Joshua | `concursos`, `gateway` y `marcador`, con Redis | Gateway y caché |
+| Diego | El front, la demo de fallas y la observabilidad mínima | Qué ve el usuario cuando algo falla |
 
 ### Emiliano: `evaluacion` e integración
 
@@ -59,10 +59,13 @@ Primero (paso 1):
 - [ ] Pasar el worker y el ejecutor de Python a un servicio propio, con su Dockerfile.
 - [ ] Consumir de RabbitMQ, con confirmación solo al guardar el resultado, y varios workers con `--scale`.
 - [ ] Conservar el lease, el resultado único y el tope de 3 tomas con `ERROR_SERVIDOR`.
-- [ ] Armar con Diego el `docker-compose.yml` de la etapa 2.
+- [ ] Armar el `docker-compose.yml` de la etapa 2 (paso 2) y quedarse con él: los demás agregan su servicio con pull requests chicos.
+- [ ] nginx con `least_conn` delante de las réplicas del gateway y Eureka en su contenedor (paso 2). Cada dueño registra su servicio, y Joshua registra el gateway.
 
 Después:
+- [ ] Circuit breaker y timeouts en las rutas del gateway (paso 6), con pull requests que revisa Joshua.
 - [ ] Publicar el resultado de cada envío para `marcador` (paso 5).
+- [ ] Cola de mensajes muertos y tope de reintentos, del lado del consumidor, junto con Enrique (paso 6).
 - [ ] Lenguajes (paso 8): compiladores en la imagen, paso de compilación con su propio tope, convenciones (en Java la clase se llama `Main`) y un código de ejemplo por lenguaje.
 - [ ] Verificar y documentar dos riesgos: que el código del alumno lea `/proc/<pid>/environ` del proceso Java, y que un `#include` filtre archivos del servidor en el mensaje de compilación.
 - [ ] Si alcanza (paso 9): sandbox por envío, límite de memoria y evaluación final.
@@ -78,15 +81,21 @@ Primero (paso 1):
 Autenticación (paso 3):
 - [ ] Servicio `identidad`: inicio de sesión con contraseña guardada con hash, token firmado con vencimiento, bloqueo y revocación de cuentas, y los roles alumno, organizador y administrador.
 - [ ] En `envios`: rechazar la subida sin token válido y dejar que cada alumno envíe y consulte solo lo suyo. Con eso termina la suplantación por `alumnoId`.
+- [ ] Filtro que valida el token en el gateway. El gateway es de Joshua: el filtro entra con un pull request que él revisa.
 
 Después:
-- [ ] Cola de mensajes muertos y tope de reintentos junto con Diego (paso 6).
+- [ ] Cola de mensajes muertos y tope de reintentos, del lado del productor, junto con Emiliano (paso 6).
 - [ ] Redis para sesiones y revocación, si hace falta.
 
-### Joshua: `concursos` y `marcador`
+### Joshua: `concursos`, `gateway` y `marcador`
 
 Primero (paso 1):
 - [ ] `concursos` como servicio, con su siembra y las rutas actuales. En este paso conserva la tabla de posiciones y las cuentas de demo.
+
+Entrada (paso 2, puede empezar ya contra el monolito):
+- [ ] Probar el primer día qué versión de Spring Cloud funciona con Spring Boot 3.3.13.
+- [ ] Gateway en 2 réplicas, con rutas por prefijo y sin lógica de negocio.
+- [ ] Registrar el gateway en Eureka y dejar listas las rutas para que nginx y el circuit breaker de Emiliano se conecten.
 
 Después:
 - [ ] `marcador` aparte (paso 5): consume los resultados, guarda su propio modelo y calcula la tabla.
@@ -94,19 +103,17 @@ Después:
 - [ ] Repetir la prueba de carga (`scripts/carga.py`) contra los servicios y comparar con la del monolito.
 - [ ] Si alcanza (paso 9): dificultad por resueltos, desempate completo, interfaz de organizador y saga de cierre del concurso.
 
-### Diego: `gateway`, infraestructura y front
+### Diego: el front, la demo de fallas y la observabilidad
 
-Primero (paso 2, puede empezar ya contra el monolito):
-- [ ] Probar el primer día qué versión de Spring Cloud funciona con Spring Boot 3.3.13.
-- [ ] Gateway en 2 réplicas, con rutas por prefijo y sin lógica de negocio.
-- [ ] nginx con `least_conn` delante y Eureka. Cada dueño registra su servicio.
-- [ ] Quedarse con el `docker-compose.yml`: los demás agregan su servicio con pull requests chicos.
+Primero:
+- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde.
+- [ ] Pantalla de inicio de sesión (paso 3), con el token en cada petición.
 
 Después:
-- [ ] Filtro del token en el gateway y pantalla de inicio de sesión (paso 3).
-- [ ] Script de la demo de fallas (paso 4).
-- [ ] Circuit breaker y timeouts en las rutas (paso 6); id de correlación y vista de estado (paso 7).
+- [ ] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno.
+- [ ] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios.
 - [ ] Selector de lenguaje en el front (paso 8).
+- [ ] Opcional: editor de código al costado del enunciado, junto con el front en React.
 
 ## Contratos que se fijan el primer día
 
@@ -116,14 +123,14 @@ Son los puntos donde el trabajo de uno depende del de otro. Se acuerdan el 15/11
 |---|---|---|
 | Mensaje del envío a evaluar | Enrique y Emiliano | Una cola de RabbitMQ; el cuerpo lleva el `envioId`. El estado sigue en PostgreSQL |
 | Mensaje del resultado | Emiliano y Joshua | `envioId`, `cuentaId`, `problemaId`, `veredicto` y `llegadaEn` |
-| Token | Enrique y Diego | Token firmado con `sub` (la cuenta), `rol` y `exp`, en `Authorization: Bearer`; `POST /api/auth/login`. Dónde se valida está abierto en el PRD |
-| Rutas públicas | Diego y todos | No cambian: `/api/envios/**`, `/api/concursos/**` y `/api/cuentas-demo`. Así el front y el demo siguen igual |
+| Token | Enrique, Joshua y Diego | Token firmado con `sub` (la cuenta), `rol` y `exp`, en `Authorization: Bearer`; `POST /api/auth/login`. Dónde se valida está abierto en el PRD |
+| Rutas públicas | Joshua y todos | No cambian: `/api/envios/**`, `/api/concursos/**` y `/api/cuentas-demo`. Así el front y el demo siguen igual |
 | Datos entre servicios | Los cuatro | Pregunta abierta del PRD (una base con un esquema por servicio, o una base por servicio) |
 | Quién valida la lista de lenguajes | Emiliano y Enrique | Antes del paso 8 |
 
 ## Cómo trabajamos
 
-- Pull requests chicos y frecuentes hacia `02-separacion`. Cada PR lo revisa otra persona, en este orden: Enrique revisa a Emiliano, Joshua a Enrique, Diego a Joshua y Emiliano a Diego. Así cada quien conoce la pieza de otro.
+- Pull requests chicos y frecuentes hacia `02-separacion`. Cada PR lo revisa otra persona, en este orden: Enrique revisa a Emiliano, Joshua a Enrique, Diego a Joshua y Emiliano a Diego. El filtro del token que Enrique agrega al gateway lo revisa Joshua, que es su dueño. Así cada quien conoce la pieza de otro.
 - Cada servicio trae su README (qué hace, qué no hace y qué falta), su Dockerfile y sus pruebas.
 - Un cambio de enfoque entra primero a la bitácora del PRD.
 - Si alguien se atora más de un día, lo dice ese día, no el 24/11.
@@ -133,15 +140,15 @@ Son los puntos donde el trabajo de uno depende del de otro. Se acuerdan el 15/11
 | Parte del reporte | Quién |
 |---|---|
 | Portada y problema | Emiliano |
-| Diagrama funcional | Joshua |
-| Diagrama de arquitectura | Diego |
+| Diagrama funcional | Diego |
+| Diagrama de arquitectura | Diego, con Joshua y Emiliano revisando el gateway, Eureka y nginx |
 | Decisiones (al menos tres, con lo que se dejó atrás) | Cada quien escribe una de su área |
-| Manejo de fallas | Diego (demo) y Emiliano (lease y reentrega) |
+| Manejo de fallas | Emiliano (lease y reentrega) y Diego (demo) |
 | Cómo levantarlo y probarlo | Diego |
 | Qué falta y qué harían distinto | Enrique |
 | Quién hizo qué | Cada quien su parte; Emiliano consolida |
 
-En el pitch cada quien presenta su área en 2 o 3 minutos: Emiliano, el problema y la evaluación; Enrique, envíos, mensajería y autenticación; Joshua, el marcador y la caché; Diego, el gateway, el directorio, el balanceador y la demo de fallas.
+En el pitch cada quien presenta su área en 2 o 3 minutos: Emiliano, el problema, la evaluación, el directorio y el balanceador; Enrique, envíos, mensajería y autenticación; Joshua, el gateway y la caché del marcador; Diego, el front y la demo de fallas.
 
 ## Calendario
 
