@@ -5,11 +5,11 @@ Recorre de punta a punta los puntos 1 a 6 llamando a la API, solo con la
 biblioteca estándar de Python 3. Se puede correr varias veces: cada corrida usa
 intentoId nuevos y las comprobaciones sobre la tabla son relativas, no absolutas.
 
-Requisitos: `docker compose up` corriendo, la siembra de concurso y de cuentas
-ya aplicada, y el worker de evaluación activo.
+Requisitos: `docker compose up` corriendo. La siembra del concurso y de las
+cuentas la aplica la aplicación al arrancar.
 
 Uso:
-    python3 scripts/demo.py
+    python3 scripts/demo.py        (en Windows: python scripts/demo.py)
     python3 scripts/demo.py --base http://localhost:8080 \
         --correcta soluciones/a_correcta.py --incorrecta soluciones/a_incorrecta.py
 
@@ -23,6 +23,12 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+
+# En Windows, si la salida va a un archivo o a un pipe, Python usa cp1252 y no
+# puede imprimir los acentos ni la marca de la tabla. Se fuerza UTF-8.
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 CORRECTA_POR_OMISION = "a, b = map(int, input().split())\nprint(a + b)\n"
 INCORRECTA_POR_OMISION = "a, b = map(int, input().split())\nprint(a - b)\n"
@@ -126,18 +132,18 @@ def main():
     correcta = leer(a.correcta, CORRECTA_POR_OMISION)
     incorrecta = leer(a.incorrecta, INCORRECTA_POR_OMISION)
 
-    # Punto 1: concurso abierto con problemas (lo siembra Joshua).
+    # Punto 1: concurso abierto con problemas (lo siembra la aplicación al arrancar).
     paso(1, "Concurso abierto con sus problemas")
     _, concurso = llamar(base, "GET", "/api/concursos/activo")
     problemas = concurso.get("problemas") or []
-    exigir(problemas, "El concurso activo no trae problemas. ¿Corriste la siembra del concurso?")
+    exigir(problemas, "El concurso activo no trae problemas. ¿Está activa la siembra (siembra.activa)?")
     problema = problemas[0]
     ok(f"{concurso.get('nombre', 'concurso')}: problema {problema.get('letra')} · {problema.get('titulo')}")
 
-    # Punto 2: identidad de demo (cuentas sembradas por scripts/siembra-cuentas.sql).
+    # Punto 2: identidad de demo (cuentas sembradas al arrancar).
     paso(2, "Cuentas de demo")
     _, cuentas = llamar(base, "GET", "/api/cuentas-demo")
-    exigir(len(cuentas) >= 2, "Hacen falta al menos 2 cuentas. ¿Corriste scripts/siembra-cuentas.sql?")
+    exigir(len(cuentas) >= 2, "Hacen falta al menos 2 cuentas. ¿Está activa la siembra (siembra.activa)?")
     alumno = cuentas[0]
     ok(f"{len(cuentas)} cuentas; se usará {alumno['usuario']} (id {alumno['id']})")
 

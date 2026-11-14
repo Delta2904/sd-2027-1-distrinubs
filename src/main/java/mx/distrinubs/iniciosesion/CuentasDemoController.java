@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>En 01 no hay inicio de sesión: la identidad de demo no tiene contraseña ni
  * token (riesgo declarado en el README). Este controlador solo lee {@code cuentas};
- * las escribe la siembra ({@code scripts/siembra-cuentas.sql}).
+ * las escribe la siembra al arrancar ({@link SiembraCuentasDemo}).
  */
 @RestController
 public class CuentasDemoController {

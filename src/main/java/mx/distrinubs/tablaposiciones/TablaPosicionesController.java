@@ -35,6 +35,8 @@ import org.springframework.web.server.ResponseStatusException;
  *       más 5 minutos por cada fallo previo a esa aceptación.</li>
  *   <li>Los envíos posteriores a la primera aceptación no penalizan.</li>
  *   <li>Problemas no resueltos no suman penalización.</li>
+ *   <li>Un envío con veredicto {@code ERROR_SERVIDOR} no cuenta como fallo: el servidor
+ *       no pudo evaluarlo.</li>
  *   <li>Orden mínimo: (1) problemas resueltos DESC, (2) penalización total ASC,
  *       (3) desempate por tiempo con la hora del último envío aceptado ASC.
  *       Empates idénticos en todo comparten posición.</li>
@@ -184,6 +186,11 @@ public class TablaPosicionesController {
                     if (resuelto) {
                         // Los envíos posteriores a la primera aceptación no penalizan
                         break;
+                    }
+
+                    if ("ERROR_SERVIDOR".equalsIgnoreCase(envio.veredicto())) {
+                        // El servidor no pudo evaluarlo: no es un fallo del alumno y no penaliza.
+                        continue;
                     }
 
                     if ("ACCEPTED".equalsIgnoreCase(envio.veredicto())) {
