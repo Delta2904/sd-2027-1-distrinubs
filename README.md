@@ -43,6 +43,7 @@ En Windows el comando es `python` en lugar de `python3`.
 | Script | Comando | Qué hace |
 |---|---|---|
 | `scripts/demo.py` | `python3 scripts/demo.py` | Recorre los puntos 1 a 6 del alcance contra la API: concurso, cuentas, envío con reintento, Wrong Answer, Accepted y tabla |
+| `scripts/demo_fallas.py` | `python3 scripts/demo_fallas.py --todos` | Demostración de manejo de fallas del Paso 4: worker muerto a media evaluación, réplica de gateway apagada y salida de instancia en Eureka |
 | `scripts/carga.py` | `python3 scripts/carga.py --escenario rafaga` | Prueba de carga del marcador: simula 200 alumnos y mide cuánto tarda cada envío en aparecer evaluado en la tabla. Ver "Prueba de carga del marcador" |
 
 Sin Python instalado, `demo.py` corre dentro del contenedor: `docker compose exec -T app python3 - < scripts/demo.py` en bash, o `Get-Content scripts/demo.py | docker compose exec -T app python3 -` en PowerShell.

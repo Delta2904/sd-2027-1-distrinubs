@@ -3,52 +3,169 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Distrinubs</title>
+  <title>Distrinubs · Juez en Línea</title>
   <link rel="stylesheet" href="estilos.css">
 </head>
 <body>
+  <!-- Alerta global para fallas del gateway o servicios caídos -->
+  <div id="alerta-servicio" class="alerta-falla oculto" role="alert">
+    <div class="alerta-contenido">
+      <strong id="alerta-titulo">Falla en servicio</strong>
+      <p id="alerta-mensaje"></p>
+      <small id="alerta-detalle" class="alerta-meta"></small>
+    </div>
+    <button id="btn-cerrar-alerta" type="button" aria-label="Cerrar alerta">✕</button>
+  </div>
+
   <header>
-    <h1>Distrinubs</h1>
-    <p id="concurso-nombre">Cargando concurso…</p>
+    <div class="header-titular">
+      <h1>Distrinubs</h1>
+      <span class="badge-etapa">Etapa 2 · Separación</span>
+    </div>
+    <div class="header-info">
+      <p id="concurso-nombre">Cargando concurso…</p>
+      <div id="correlacion-info" class="meta-correlacion">Id correlación: <span id="id-correlacion-actual">-</span></div>
+    </div>
   </header>
 
   <main>
-    <section id="seccion-alumno">
-      <h2>1. Alumno de demo</h2>
-      <label for="alumno">Elige tu cuenta</label>
-      <select id="alumno"></select>
-      <p class="aviso">Etapa 1: sin contraseña ni token. Cualquiera puede enviar con cualquier cuenta de demo.</p>
+    <!-- 1. Inicio de sesión y autenticación (Paso 3) -->
+    <section id="seccion-auth" class="tarjeta">
+      <h2>1. Inicio de sesión (Paso 3)</h2>
+
+      <!-- Panel cuando NO hay sesión -->
+      <div id="panel-login">
+        <p class="ayuda-texto">
+          Contrato acordado: token firmado con <code>sub</code>, <code>rol</code> y <code>exp</code> enviado en
+          <code>Authorization: Bearer &lt;token&gt;</code> en cada petición.
+        </p>
+
+        <form id="form-login" onsubmit="return false;">
+          <div class="fila-formulario">
+            <div class="campo">
+              <label for="login-usuario">Usuario</label>
+              <input type="text" id="login-usuario" placeholder="ej. alumno1" autocomplete="username">
+            </div>
+            <div class="campo">
+              <label for="login-contrasena">Contraseña</label>
+              <input type="password" id="login-contrasena" placeholder="contraseña o demo" autocomplete="current-password">
+            </div>
+            <div class="campo-boton">
+              <button id="btn-login" type="button" class="btn-primario">Iniciar sesión</button>
+            </div>
+          </div>
+
+          <!-- Selector rápido de cuentas sembradas -->
+          <div class="cuentas-rapidas">
+            <span class="etiqueta-rapida">Cuentas sembradas de prueba:</span>
+            <select id="alumno" title="Cuentas sembradas"></select>
+            <button id="btn-usar-demo" type="button" class="btn-secundario">Autocompletar credenciales</button>
+          </div>
+        </form>
+        <p id="mensaje-login" role="status"></p>
+      </div>
+
+      <!-- Panel cuando SÍ hay sesión activa -->
+      <div id="tarjeta-sesion" class="tarjeta-sesion oculto">
+        <div class="sesion-datos">
+          <span class="indicador-activo">● Conectado</span>
+          <span id="sesion-nombre" class="sesion-usuario">Alumno</span>
+          <span id="sesion-rol" class="badge-rol">ALUMNO</span>
+          <span class="sesion-meta">Usuario: <strong id="sesion-usuario">alumno1</strong></span>
+          <span class="sesion-meta">Token activo: <code id="sesion-token-vista">Bearer ...</code></span>
+        </div>
+        <button id="btn-logout" type="button" class="btn-secundario">Cerrar sesión</button>
+      </div>
     </section>
 
-    <section id="seccion-envio">
-      <h2>2. Subir envío</h2>
-      <label for="problema">Problema</label>
-      <select id="problema"></select>
-      <pre id="enunciado"></pre>
+    <!-- 2. Subir envío: Enunciado y Editor al costado estilo LeetCode (Paso 8 y Opcional) -->
+    <section id="seccion-envio" class="tarjeta">
+      <h2>2. Problema y Editor de código (Paso 8)</h2>
 
-      <label for="lenguaje">Lenguaje</label>
-      <select id="lenguaje">
-        <option value="PYTHON3">Python 3</option>
-      </select>
+      <div class="panel-split">
+        <!-- Columna izquierda: Enunciado del problema -->
+        <div class="columna-enunciado">
+          <label for="problema">Problema</label>
+          <select id="problema"></select>
+          <div class="contenedor-enunciado">
+            <pre id="enunciado">Selecciona un problema para ver el enunciado...</pre>
+          </div>
+        </div>
 
-      <label for="codigo">Código</label>
-      <textarea id="codigo" rows="10" spellcheck="false"></textarea>
+        <!-- Columna derecha: Editor de código y lenguaje -->
+        <div class="columna-editor">
+          <div class="barra-editor">
+            <div class="campo-lenguaje">
+              <label for="lenguaje">Lenguaje</label>
+              <select id="lenguaje">
+                <option value="PYTHON3">Python 3</option>
+                <option value="CPP">C++ (g++)</option>
+                <option value="C">C (gcc)</option>
+                <option value="JAVA">Java (clase Main)</option>
+                <option value="JAVASCRIPT">JavaScript (Node.js)</option>
+              </select>
+            </div>
+            <button id="btn-plantilla" type="button" class="btn-secundario" title="Cargar plantilla inicial">Cargar plantilla</button>
+          </div>
 
-      <button id="enviar" type="button">Enviar</button>
-      <p id="mensaje-envio" role="status"></p>
+          <label for="codigo">Código fuente</label>
+          <textarea id="codigo" rows="14" spellcheck="false" placeholder="Escribe tu solución aquí..."></textarea>
+
+          <div class="acciones-envio">
+            <button id="enviar" type="button" class="btn-primario">Enviar solución</button>
+            <span id="mensaje-envio" role="status"></span>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section id="seccion-estado">
+    <!-- 3. Estado del envío (Paso 1 y 4) -->
+    <section id="seccion-estado" class="tarjeta">
       <h2>3. Estado del envío</h2>
-      <p id="estado">Todavía no has enviado nada.</p>
+      <div id="caja-estado" class="caja-estado">
+        <p id="estado">Todavía no has enviado nada.</p>
+      </div>
     </section>
 
-    <section id="seccion-tabla">
-      <h2>4. Tabla de posiciones (provisional)</h2>
-      <button id="actualizar-tabla" type="button">Actualizar</button>
-      <div id="tabla"></div>
+    <!-- 4. Tabla de posiciones (Paso 1 y 5) -->
+    <section id="seccion-tabla" class="tarjeta">
+      <div class="cabecera-seccion">
+        <h2>4. Tabla de posiciones (provisional)</h2>
+        <button id="actualizar-tabla" type="button" class="btn-secundario">Actualizar tabla</button>
+      </div>
+      <div id="tabla" class="contenedor-tabla"></div>
+    </section>
+
+    <!-- 5. Observabilidad mínima: Estado de los servicios (Paso 7) -->
+    <section id="seccion-observabilidad" class="tarjeta">
+      <div class="cabecera-seccion">
+        <h2>5. Observabilidad de servicios (Paso 7)</h2>
+        <div>
+          <button id="actualizar-observabilidad" type="button" class="btn-secundario">Actualizar estado</button>
+          <a href="/actuator/health" target="_blank" rel="noopener" class="enlace-actuator">Actuator Health ↗</a>
+        </div>
+      </div>
+      <p class="ayuda-texto">
+        Monitoreo en vivo de instancias, workers, base de datos y directorio Eureka con ID de correlación en logs.
+      </p>
+
+      <div id="resumen-observabilidad" class="resumen-observabilidad">
+        <span>Estado global: <strong id="estado-global-badge" class="badge-estado estado-up">UP</strong></span>
+        <span>Workers: <strong id="obs-workers">-</strong></span>
+        <span>En cola: <strong id="obs-cola">-</strong></span>
+        <span>Leases activos: <strong id="obs-leases">-</strong></span>
+      </div>
+
+      <div id="grid-servicios" class="grid-servicios">
+        <!-- Se llena dinámicamente con JavaScript desde /api/observabilidad/estado -->
+        <p class="cargando">Cargando estado de los servicios…</p>
+      </div>
     </section>
   </main>
+
+  <footer>
+    <p>Distrinubs 2027-1 · FI-UNAM · Sistemas Distribuidos</p>
+  </footer>
 
   <script src="app.js"></script>
 </body>
