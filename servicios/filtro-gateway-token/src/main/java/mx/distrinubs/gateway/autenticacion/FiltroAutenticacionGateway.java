@@ -1,0 +1,137 @@
+package mx.distrinubs.gateway.autenticacion;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Set;
+
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.server.ServerWebExchange;
+
+import reactor.core.publisher.Mono;
+
+/**
+ * Filtro global de Spring Cloud Gateway que exige un token JWT válido y no revocado
+ * en rutas protegidas, aplicando falla cerrada si el servicio {@code identidad} cae,
+ * limpiando cualquier cabecera {@code X-Usuario-*} falsificada por el cliente y
+ * propagando la identidad verificada hacia los servicios internos.
+ */
+@Component
+public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
+
+    public static final String HEADER_USUARIO_ID = "X-Usuario-Id";
+    public static final String HEADER_USUARIO_SUB = "X-Usuario-Sub";
+    public static final String HEADER_USUARIO_ROL = "X-Usuario-Rol";
+
+    private static final Set<String> RUTAS_GET_PUBLICAS = Set.of(
+            "/",
+            "/index.html",
+            "/app.js",
+            "/estilos.css",
+            "/favicon.ico",
+            "/api/cuentas-demo",
+            "/api/concursos/activo",
+            "/api/concursos/activo/tabla",
+            "/actuator/health"
+    );
+
+    private final VerificadorJwtGateway verificadorJwt;
+    private final VerificadorRemotoIdentidad verificadorRemoto;
+
+    public FiltroAutenticacionGateway(
+            VerificadorJwtGateway verificadorJwt,
+            VerificadorRemotoIdentidad verificadorRemoto) {
+        this.verificadorJwt = verificadorJwt;
+        this.verificadorRemoto = verificadorRemoto;
+    }
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        HttpMethod metodo = request.getMethod();
+        String ruta = request.getURI().getPath();
+
+        if (esRutaPublica(metodo, ruta)) {
+            ServerHttpRequest limpia = limpiarCabecerasIdentidad(request).build();
+            return chain.filter(exchange.mutate().request(limpia).build());
+        }
+
+        String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (authHeader == null || authHeader.isBlank()) {
+            return escribirError(exchange, HttpStatus.UNAUTHORIZED, "Token de autenticación requerido");
+        }
+
+        SesionGateway sesionLocal = verificadorJwt.verificar(authHeader);
+        if (sesionLocal == null) {
+            return escribirError(exchange, HttpStatus.UNAUTHORIZED, "Token inválido o expirado");
+        }
+
+        String headerNormalizado = authHeader.trim().regionMatches(true, 0, "Bearer ", 0, 7)
+                ? authHeader.trim()
+                : "Bearer " + authHeader.trim();
+
+        return verificadorRemoto.validarRemoto(headerNormalizado)
+                .flatMap(sesion -> {
+                    ServerHttpRequest requestAutenticado = limpiarCabecerasIdentidad(request)
+                            .header(HEADER_USUARIO_ID, String.valueOf(sesion.cuentaId()))
+                            .header(HEADER_USUARIO_SUB, sesion.usuario())
+                            .header(HEADER_USUARIO_ROL, sesion.rol())
+                            .build();
+                    return chain.filter(exchange.mutate().request(requestAutenticado).build());
+                })
+                .onErrorResume(error -> {
+                    if (error instanceof ResponseStatusException rse) {
+                        return escribirError(exchange, rse.getStatusCode(),
+                                rse.getReason() != null ? rse.getReason() : "Acceso rechazado");
+                    }
+                    return escribirError(exchange, HttpStatus.SERVICE_UNAVAILABLE,
+                            "Servicio de identidad no disponible");
+                });
+    }
+
+    @Override
+    public int getOrder() {
+        return -100;
+    }
+
+    private boolean esRutaPublica(HttpMethod metodo, String ruta) {
+        if (metodo == HttpMethod.OPTIONS) {
+            return true;
+        }
+        if (metodo == HttpMethod.POST && "/api/auth/login".equals(ruta)) {
+            return true;
+        }
+        if (metodo == HttpMethod.GET) {
+            if (RUTAS_GET_PUBLICAS.contains(ruta) || ruta.startsWith("/actuator/health/")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ServerHttpRequest.Builder limpiarCabecerasIdentidad(ServerHttpRequest request) {
+        return request.mutate().headers(headers -> {
+            headers.remove(HEADER_USUARIO_ID);
+            headers.remove(HEADER_USUARIO_SUB);
+            headers.remove(HEADER_USUARIO_ROL);
+        });
+    }
+
+    private Mono<Void> escribirError(ServerWebExchange exchange, HttpStatusCode status, String mensaje) {
+        exchange.getResponse().setStatusCode(status);
+        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        String cuerpo = "{\"error\":\"" + mensaje.replace("\"", "'") + "\"}";
+        DataBuffer buffer = exchange.getResponse().bufferFactory()
+                .wrap(cuerpo.getBytes(StandardCharsets.UTF_8));
+        return exchange.getResponse().writeWith(Mono.just(buffer));
+    }
+}

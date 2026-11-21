@@ -74,17 +74,17 @@ Después:
 ### Enrique: `envios`, mensajería e `identidad`
 
 Primero (paso 1):
-- [ ] `envios` como servicio, con las mismas rutas `POST /api/envios` y `GET /api/envios/{id}`.
-- [ ] Publicar en RabbitMQ después de guardar. Falta decidir qué pasa si el servicio cae entre guardar y publicar (barrido u outbox, pregunta abierta del PRD).
-- [ ] Mantener la idempotencia por `intentoId`.
+- [x] `envios` como servicio (`servicios/envios/`), con las mismas rutas `POST /api/envios` y `GET /api/envios/{id}`.
+- [x] Publicar en RabbitMQ después de guardar y cubrir caídas entre guardar y publicar mediante barrido periódico (`BarridoRepublicacionEnvios`).
+- [x] Mantener la idempotencia por `intentoId`.
 
 Autenticación (paso 3):
-- [ ] Servicio `identidad`: inicio de sesión con contraseña guardada con hash, token firmado con vencimiento, bloqueo y revocación de cuentas, y los roles alumno, organizador y administrador.
-- [ ] En `envios`: rechazar la subida sin token válido y dejar que cada alumno envíe y consulte solo lo suyo. Con eso termina la suplantación por `alumnoId`.
-- [ ] Filtro que valida el token en el gateway. El gateway es de Joshua: el filtro entra con un pull request que él revisa.
+- [x] Servicio `identidad` (`servicios/identidad/`): inicio de sesión con contraseña guardada con hash BCrypt, token JWT firmado con vencimiento, bloqueo y revocación de cuentas/tokens (`tokens_revocados`), y los roles alumno, organizador y administrador.
+- [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`) y dejar que cada alumno envíe y consulte solo lo suyo. Con eso termina la suplantación por `alumnoId`.
+- [ ] Filtro que valida el token en el gateway (`servicios/filtro-gateway-token/`): implementado y probado; pendiente integrarlo vía pull request cuando Joshua suba el servicio `gateway`.
 
 Después:
-- [ ] Cola de mensajes muertos y tope de reintentos, del lado del productor, junto con Emiliano (paso 6).
+- [x] Cola de mensajes muertos (`envios.evaluacion.dlq`) y tope de reintentos (`x-max-reintentos`), del lado del productor (`servicios/envios/`), pendiente coordinar consumo con Emiliano (paso 6).
 - [ ] Redis para sesiones y revocación, si hace falta.
 
 ### Joshua: `concursos`, `gateway` y `marcador`
