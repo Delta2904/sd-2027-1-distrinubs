@@ -181,11 +181,26 @@ def demo_caso_2(base, simulado=False):
 
     imprimir_paso("2.1", "Verificando estado inicial del Gateway y sus 2 réplicas")
     info("Topología de entrada: [Nginx / Balanceador] -> [Gateway Réplica 1, Gateway Réplica 2]")
-    ok("Ambas réplicas respondiendo activamente (HTTP 200 OK en /api/concursos/activo).")
+    en_vivo = False
+    if not simulado:
+        st, _, corr = llamar_api(base, "GET", "/api/concursos/activo")
+        if st == 200:
+            en_vivo = True
+            ok(f"Gateway respondiendo activamente en vivo (HTTP 200 OK, Id: {corr[:8]}…).")
+        else:
+            info(f"Gateway en {base} no respondió ({st}); ejecutando demostración en modo simulado.")
+    if not en_vivo:
+        ok("Ambas réplicas respondiendo activamente (HTTP 200 OK en /api/concursos/activo).")
 
     imprimir_paso("2.2", "Enviando ráfaga de 5 peticiones de sondeo normales")
     for i in range(1, 6):
-        info(f"Petición {i}/5 recibida por el balanceador -> Gateway réplica balanceada (200 OK)")
+        if en_vivo:
+            t0 = time.time()
+            st, _, corr = llamar_api(base, "GET", "/api/concursos/activo")
+            ms = int((time.time() - t0) * 1000)
+            info(f"Petición {i}/5 -> HTTP {st} ({ms} ms, Id: {corr[:8]}…)")
+        else:
+            info(f"Petición {i}/5 recibida por el balanceador -> Gateway réplica balanceada (200 OK)")
         time.sleep(0.3)
 
     imprimir_paso("2.3", "FALLA INDUCIDA: Deteniendo repentinamente Gateway Réplica 1 (docker stop)")
@@ -197,12 +212,22 @@ def demo_caso_2(base, simulado=False):
     peticiones_exitosas = 0
 
     for i in range(1, 9):
-        # En ejecución real o simulada, el balanceador redirige a la réplica superviviente
         id_corr = str(uuid.uuid4())
         info(f"Petición cliente {i}: GET /api/concursos/activo (Id: {id_corr[:8]}…)")
-        time.sleep(0.2)
-        peticiones_exitosas += 1
-        ok(f"  -> Atendida con éxito por Gateway Réplica 2 (HTTP 200 OK, {12 + i} ms)")
+        if en_vivo:
+            t0 = time.time()
+            st, _, _ = llamar_api(base, "GET", "/api/concursos/activo", id_correlacion=id_corr)
+            ms = int((time.time() - t0) * 1000)
+            if st == 200:
+                peticiones_exitosas += 1
+                ok(f"  -> Atendida con éxito por Gateway superviviente (HTTP 200 OK, {ms} ms)")
+            else:
+                fallas_visibles += 1
+                fallo(f"  -> Respuesta inesperada HTTP {st} ({ms} ms)")
+        else:
+            time.sleep(0.2)
+            peticiones_exitosas += 1
+            ok(f"  -> Atendida con éxito por Gateway Réplica 2 (HTTP 200 OK, {12 + i} ms)")
 
     imprimir_paso("2.5", "Verificación de impacto para el usuario")
     ok(f"Peticiones atendidas con éxito: {peticiones_exitosas}/8 (100% de disponibilidad)")
@@ -223,6 +248,12 @@ def demo_caso_3(base, simulado=False):
     print("  4. El Gateway actualiza su tabla y deja de enviar peticiones a la instancia caída.\n")
 
     imprimir_paso("3.1", "Consultando registro actual en Eureka (Directorio de Servicios)")
+    eureka_url = os.environ.get("EUREKA_URL", "http://localhost:8761")
+    st_eureka, _, _ = (0, None, "") if simulado else llamar_api(eureka_url, "GET", "/eureka/apps", timeout=2)
+    if st_eureka == 200:
+        ok(f"Eureka Server en vivo respondiendo en {eureka_url}/eureka/apps (HTTP 200 OK).")
+    else:
+        info(f"Eureka en {eureka_url} no accesible en vivo; mostrando registro de demostración.")
     info("GET /eureka/apps/ENVIOS-SERVICE")
     print("      +-------------------------------------------------------------+")
     print("      | Instancia: envios-service-instancia-1                       |")
