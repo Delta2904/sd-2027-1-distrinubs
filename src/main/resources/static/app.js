@@ -230,6 +230,8 @@ async function iniciarSesion() {
     if (!r.ok) {
       if (r.status === 401) {
         ponerMensaje(msg, 'Credenciales incorrectas.', 'error');
+      } else if (r.status === 404 || r.status === 502 || r.status === 503) {
+        ponerMensaje(msg, `El servicio de identidad aún no está disponible (HTTP ${r.status}).`, 'aviso');
       } else {
         ponerMensaje(msg, `Error en el servicio de identidad (${r.status}).`, 'error');
       }
@@ -513,15 +515,16 @@ async function cargarObservabilidad() {
   try {
     const datos = await obtenerJson('/api/observabilidad/estado');
 
-    // Métricas del sistema
-    if ($('obs-workers')) $('obs-workers').textContent = datos.servicios.find(s => s.nombre === 'evaluacion')?.instancias ?? '-';
-    if ($('obs-cola')) $('obs-cola').textContent = datos.metricas?.enviosEnCola ?? '0';
-    if ($('obs-leases')) $('obs-leases').textContent = datos.metricas?.leasesActivos ?? '0';
+    // Resumen del sistema
+    if ($('obs-activos')) $('obs-activos').textContent = datos.resumen?.activos ?? '0';
+    if ($('obs-caidos')) $('obs-caidos').textContent = datos.resumen?.caidos ?? '0';
+    if ($('obs-no-disponibles')) $('obs-no-disponibles').textContent = datos.resumen?.noDisponibles ?? '0';
 
+    const estadoGlobal = (datos.estadoGlobal || 'NO_DISPONIBLE').toLowerCase();
     const badgeGlobal = $('estado-global-badge');
     if (badgeGlobal) {
-      badgeGlobal.textContent = datos.estadoGlobal || 'UP';
-      badgeGlobal.className = `badge-estado estado-${(datos.estadoGlobal || 'up').toLowerCase()}`;
+      badgeGlobal.textContent = datos.estadoGlobal || 'NO_DISPONIBLE';
+      badgeGlobal.className = `badge-estado estado-${estadoGlobal}`;
     }
 
     grid.replaceChildren();

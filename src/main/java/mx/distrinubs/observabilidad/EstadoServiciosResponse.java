@@ -10,7 +10,7 @@ public record EstadoServiciosResponse(
         Instant timestamp,
         String estadoGlobal,
         List<ServicioDetalle> servicios,
-        MetricasSistema metricas
+        ResumenServicios resumen
 ) {
     public record ServicioDetalle(
             String nombre,
@@ -22,11 +22,10 @@ public record EstadoServiciosResponse(
     ) {
     }
 
-    public record MetricasSistema(
-            int enviosEnCola,
-            int leasesActivos,
-            int totalCuentas,
-            String concursoActivo
+    public record ResumenServicios(
+            int activos,
+            int caidos,
+            int noDisponibles
     ) {
     }
 }

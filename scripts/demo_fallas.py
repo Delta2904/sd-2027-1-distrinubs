@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
-"""Script de demostración de fallas (Paso 4 de la etapa 02-separacion).
+"""Script de demostración de fallas reales (Paso 4 de la etapa 02-separacion).
 
 Responsable: Diego Contreras (@diegocontrras)
-Área de defensa: Qué ve el usuario cuando algo falla (Fallas parciales,
-concurrencia de workers, balanceo en réplicas del gateway y desregistro en Eureka).
+Área de defensa: Qué ve el usuario cuando algo falla.
 
-Demuestra los tres casos obligatorios del Paso 4:
-  Caso 1: Matar un worker a media evaluación (lease vencido, reevaluación por otro worker,
-          veredicto único y sin penalización para el alumno).
-  Caso 2: Apagar una réplica del gateway (nginx / balanceador reenvía a la réplica sana
-          sin pérdida de servicio ni caída visible para el usuario).
-  Caso 3: Ver salir de Eureka a una instancia caída (detección de ausencia de latido
-          heartbeat y expulsión del directorio de servicios).
+Ejecuta y verifica los tres casos del Paso 4 contra el sistema real en Docker:
+  Caso 1: Matar un worker a media evaluación (SIGKILL al contenedor worker, esperar
+          vencimiento de lease y confirmar que otro worker entrega veredicto único).
+  Caso 2: Apagar una réplica del gateway (docker stop a una réplica y comprobar que
+          el balanceador sigue respondiendo HTTP 200 sin caída visible).
+  Caso 3: Ver salir de Eureka a una instancia caída (detener una instancia registrada
+          y consultar /eureka/apps hasta observar su salida del directorio).
+
+Si las piezas necesarias (p. ej. réplicas de gateway, workers separados o Eureka)
+todavía no existen o no están levantadas, el script lo indica claramente y NO
+reporta éxito.
 
 Uso:
-  python scripts/demo_fallas.py --todos
-  python scripts/demo_fallas.py --caso 1
-  python scripts/demo_fallas.py --caso 2
-  python scripts/demo_fallas.py --caso 3
-  python scripts/demo_fallas.py --simulado   (muestra la traza completa paso a paso)
+  python3 scripts/demo_fallas.py --todos
+  python3 scripts/demo_fallas.py --caso 1
+  python3 scripts/demo_fallas.py --caso 2
+  python3 scripts/demo_fallas.py --caso 3
 """
 
 import argparse
@@ -31,20 +33,17 @@ import urllib.error
 import urllib.request
 import uuid
 
-# Configuración de salida UTF-8 en consola de Windows
-for flujo in (sys.stdout, sys.stderr):
-    if hasattr(flujo, "reconfigure"):
-        flujo.reconfigure(encoding="utf-8")
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 
-def imprimir_encabezado(titulo):
-    separador = "=" * 76
-    print(f"\n{separador}")
-    print(f"  {titulo.center(72)}")
-    print(f"{separador}\n")
+def encabezado(titulo):
+    sep = "=" * 76
+    print(f"\n{sep}\n  {titulo.center(72)}\n{sep}\n")
 
 
-def imprimir_paso(num, texto):
+def paso(num, texto):
     print(f"  [{num}] {texto}")
 
 
@@ -56,275 +55,346 @@ def info(texto):
     print(f"      [INFO] {texto}")
 
 
-def alerta(texto):
-    print(f"      [AVISO] {texto}")
-
-
 def fallo(texto):
-    print(f"      [FALLA DETECTADA] {texto}")
+    print(f"      [FALLÓ] {texto}")
 
 
-def llamar_api(base, metodo, ruta, cuerpo=None, token=None, id_correlacion=None, timeout=6):
+def no_disponible(texto):
+    print(f"      [NO DISPONIBLE] {texto}")
+
+
+def llamar_api(base, metodo, ruta, cuerpo=None, headers_extra=None, timeout=5):
     datos = json.dumps(cuerpo).encode("utf-8") if cuerpo is not None else None
-    id_corr = id_correlacion or str(uuid.uuid4())
+    id_corr = str(uuid.uuid4())
     headers = {
         "X-Correlation-Id": id_corr,
         "Accept": "application/json",
     }
     if datos:
         headers["Content-Type"] = "application/json"
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if headers_extra:
+        headers.update(headers_extra)
 
-    peticion = urllib.request.Request(base + ruta, data=datos, method=metodo, headers=headers)
+    req = urllib.request.Request(base + ruta, data=datos, method=metodo, headers=headers)
     try:
-        with urllib.request.urlopen(peticion, timeout=timeout) as r:
-            salida = r.read().decode("utf-8")
-            return r.status, json.loads(salida) if salida else None, id_corr
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read().decode("utf-8")
+            return r.status, json.loads(raw) if raw else None, id_corr
     except urllib.error.HTTPError as e:
-        salida = e.read().decode("utf-8", "replace")
-        return e.code, salida, id_corr
+        return e.code, e.read().decode("utf-8", "replace"), id_corr
     except urllib.error.URLError as e:
         return 0, str(e.reason), id_corr
 
 
-def verificar_docker_disponible():
-    try:
-        res = subprocess.run(["docker", "ps"], capture_output=True, text=True, timeout=3)
-        return res.returncode == 0
-    except Exception:
-        return False
+def contenedores_de(servicio):
+    """Obtiene los IDs de contenedores en ejecución cuyo nombre coincide con el servicio."""
+    for cmd in (
+        ["docker", "compose", "ps", "-q", servicio],
+        ["docker", "ps", "--filter", f"name={servicio}", "--filter", "status=running", "-q"],
+    ):
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                ids = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+                if ids:
+                    return ids
+        except Exception:
+            pass
+    return []
+
+
+def docker_cmd(accion, contenedor_id):
+    if accion == "kill":
+        cmd = ["docker", "kill", "-s", "SIGKILL", contenedor_id]
+    else:
+        cmd = ["docker", accion, contenedor_id]
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    return res.returncode == 0, (res.stderr or res.stdout).strip()
 
 
 # -----------------------------------------------------------------------------
 # CASO 1: Matar un worker a media evaluación
 # -----------------------------------------------------------------------------
-def demo_caso_1(base, simulado=False):
-    imprimir_encabezado("CASO 1: Matar un worker a media evaluación")
-    print("Objetivo: Demostrar que si un worker cae durante una evaluación:")
-    print("  1. El lease vence en la base de datos sin duplicar resultados.")
-    print("  2. Otro worker retoma el envío de forma transparente.")
-    print("  3. El alumno recibe su veredicto sin penalización indebida.")
-    print("  4. Si se agota el tope de 3 tomas, se asigna ERROR_SERVIDOR sin penalizar.\n")
+def caso_1_worker(base, espera_s):
+    encabezado("CASO 1: Matar un worker a media evaluación")
 
+    paso("1.1", "Comprobando API y contenedores de evaluación")
+    st, concurso, _ = llamar_api(base, "GET", "/api/concursos/activo")
+    if st != 200 or not isinstance(concurso, dict) or not concurso.get("problemas"):
+        no_disponible(f"La API en {base} no respondió con concurso activo (HTTP {st}).")
+        return False
+
+    st_c, cuentas, _ = llamar_api(base, "GET", "/api/cuentas-demo")
+    if st_c != 200 or not isinstance(cuentas, list) or not cuentas:
+        no_disponible(f"No se pudieron obtener cuentas de demo (HTTP {st_c}).")
+        return False
+
+    workers = contenedores_de("evaluacion")
+    if len(workers) < 2:
+        no_disponible(
+            f"Se encontraron {len(workers)} contenedor(es) 'evaluacion'. "
+            "Se requieren al menos 2 réplicas para matar una y observar que otra retoma el envío."
+        )
+        return False
+
+    problema_id = concurso["problemas"][0]["id"]
+    alumno_id = cuentas[0]["id"]
+    ok(f"Concurso listo (problema {problema_id}) y {len(workers)} workers detectados.")
+
+    paso("1.2", "Subiendo solución lenta (4 s) para interceptar el estado 'evaluando'")
     codigo_lento = (
         "import time\n"
-        "time.sleep(3)\n"
+        "time.sleep(4)\n"
         "a, b = map(int, input().split())\n"
         "print(a + b)\n"
     )
-
-    imprimir_paso("1.1", "Preparando inicio de sesión y obtención de token de autenticación")
-    status, res, id_corr = llamar_api(
-        base, "POST", "/api/auth/login", {"usuario": "alumno1", "contrasena": "distrinubs"}
+    st_e, env, _ = llamar_api(
+        base,
+        "POST",
+        "/api/envios",
+        {
+            "alumnoId": alumno_id,
+            "problemaId": problema_id,
+            "intentoId": str(uuid.uuid4()),
+            "lenguaje": "PYTHON3",
+            "codigo": codigo_lento,
+        },
     )
-    token = None
-    if status == 200 and isinstance(res, dict) and "token" in res:
-        token = res["token"]
-        ok(f"Token obtenido para alumno1 (Id correlación: {id_corr})")
-    else:
-        info("API de login directa no activa o en modo simulado: usando token simulado")
-        token = "eyJhbGciOiJIUzI1NiJ9.demo-token-caso1.firma"
+    if st_e not in (200, 201) or not isinstance(env, dict) or "envioId" not in env:
+        fallo(f"No se pudo crear el envío (HTTP {st_e}): {env}")
+        return False
 
-    imprimir_paso("1.2", "Subiendo envío para problema con lease de evaluación")
-    intento_id = str(uuid.uuid4())
-    cuerpo_envio = {
-        "alumnoId": 1,
-        "problemaId": 1,
-        "intentoId": intento_id,
-        "lenguaje": "PYTHON3",
-        "codigo": codigo_lento,
-    }
-    status, res_envio, id_corr = llamar_api(base, "POST", "/api/envios", cuerpo_envio, token=token)
+    envio_id = env["envioId"]
+    ok(f"Envío {envio_id} creado (estado inicial: {env.get('estado')}).")
 
-    envio_id = 101
-    if status in (200, 201) and isinstance(res_envio, dict) and "envioId" in res_envio:
-        envio_id = res_envio["envioId"]
-        ok(f"Envío registrado exitosamente con id={envio_id}, estado='recibido'")
-    else:
-        info(f"Simulando envío recibido id={envio_id} con intentoId={intento_id}")
+    paso("1.3", "Esperando a que un worker tome el envío (estado = 'evaluando')")
+    fin_espera = time.time() + 15
+    en_evaluacion = False
+    while time.time() < fin_espera:
+        st_g, detalle, _ = llamar_api(base, "GET", f"/api/envios/{envio_id}")
+        if st_g == 200 and isinstance(detalle, dict) and detalle.get("estado") == "evaluando":
+            en_evaluacion = True
+            break
+        time.sleep(0.3)
 
-    imprimir_paso("1.3", "Worker A adquiere el lease de evaluación (vence_en = now() + 15 s)")
-    info("Worker-1 tomó el envío de la cola. Estado: EVALUANDO (lease activo).")
-    time.sleep(1)
+    if not en_evaluacion:
+        fallo(f"El envío {envio_id} no pasó a estado 'evaluando' dentro de 15 s.")
+        return False
+    ok(f"Envío {envio_id} en estado 'evaluando'.")
 
-    imprimir_paso("1.4", "FALLA INDUCIDA: Matando Worker A repentinamente a media evaluación")
-    alerta("¡Worker-1 ha sido interrumpido (kill SIGKILL)! No alcanzó a guardar veredicto.")
-    info("La fila en leases_evaluacion retiene el lease previo pero el proceso ya no existe.")
+    objetivo = workers[0]
+    paso("1.4", f"Matando worker {objetivo[:12]} con SIGKILL a media evaluación")
+    matado, err = docker_cmd("kill", objetivo)
+    if not matado:
+        fallo(f"No se pudo matar el contenedor {objetivo[:12]}: {err}")
+        return False
+    ok(f"Contenedor {objetivo[:12]} terminado abruptamente.")
 
-    imprimir_paso("1.5", "Transcurso del tiempo: el lease de Worker A expira")
-    for s in (3, 2, 1):
-        info(f"Esperando expiración de lease de Worker A... {s} s")
-        time.sleep(0.8)
-    ok("Lease vencido detectado en la cola (vence_en <= now()).")
+    try:
+        paso("1.5", f"Esperando vencimiento de lease y re-evaluación (máx. {espera_s} s)")
+        fin = time.time() + espera_s
+        veredicto = None
+        while time.time() < fin:
+            st_g, detalle, _ = llamar_api(base, "GET", f"/api/envios/{envio_id}")
+            if st_g == 200 and isinstance(detalle, dict):
+                v = detalle.get("veredicto") or (detalle.get("resultado") or {}).get("veredicto")
+                if v:
+                    veredicto = v
+                    break
+            time.sleep(1)
 
-    imprimir_paso("1.6", "Worker B superviviente detecta el envío y adquiere un nuevo lease")
-    info("Worker-2 toma el envío huérfano. Ejecutando casos de prueba...")
-    time.sleep(1.2)
+        if not veredicto:
+            fallo(f"El envío {envio_id} no obtuvo veredicto tras {espera_s} s.")
+            return False
 
-    imprimir_paso("1.7", "Worker B concluye la evaluación y persiste el veredicto")
-    ok("Veredicto registrado en resultados: ACCEPTED.")
-    ok("Restricción de unicidad respetada: exactamente 1 fila en 'resultados' para envio_id.")
-    ok("Cero penalización: la muerte del Worker A no se computa como intento fallido del alumno.")
-    print("\n  >> Resultado Caso 1: SUPERADO con éxito.\n")
+        ok(f"Envío {envio_id} completado por otro worker con veredicto: {veredicto}")
+        return True
+    finally:
+        info(f"Levantando nuevamente el worker {objetivo[:12]}...")
+        docker_cmd("start", objetivo)
 
 
 # -----------------------------------------------------------------------------
 # CASO 2: Apagar una réplica del Gateway
 # -----------------------------------------------------------------------------
-def demo_caso_2(base, simulado=False):
-    imprimir_encabezado("CASO 2: Apagar una réplica del Gateway")
-    print("Objetivo: Demostrar que ante la caída de una réplica del Gateway:")
-    print("  1. El balanceador nginx / reintento de cliente desvía el tráfico a la otra réplica.")
-    print("  2. Las peticiones del usuario continúan respondiendo HTTP 200 sin errores 502/503.")
-    print("  3. El sistema mantiene alta disponibilidad en la entrada.\n")
+def caso_2_gateway(base):
+    encabezado("CASO 2: Apagar una réplica del Gateway")
 
-    imprimir_paso("2.1", "Verificando estado inicial del Gateway y sus 2 réplicas")
-    info("Topología de entrada: [Nginx / Balanceador] -> [Gateway Réplica 1, Gateway Réplica 2]")
-    en_vivo = False
-    if not simulado:
-        st, _, corr = llamar_api(base, "GET", "/api/concursos/activo")
-        if st == 200:
-            en_vivo = True
-            ok(f"Gateway respondiendo activamente en vivo (HTTP 200 OK, Id: {corr[:8]}…).")
-        else:
-            info(f"Gateway en {base} no respondió ({st}); ejecutando demostración en modo simulado.")
-    if not en_vivo:
-        ok("Ambas réplicas respondiendo activamente (HTTP 200 OK en /api/concursos/activo).")
+    paso("2.1", "Verificando réplicas del servicio 'gateway' en Docker")
+    replicas = contenedores_de("gateway")
+    if len(replicas) < 2:
+        no_disponible(
+            f"Se encontraron {len(replicas)} contenedor(es) 'gateway'. "
+            "El gateway en 2 réplicas todavía no existe o no está levantado; no se puede comprobar."
+        )
+        return False
 
-    imprimir_paso("2.2", "Enviando ráfaga de 5 peticiones de sondeo normales")
-    for i in range(1, 6):
-        if en_vivo:
+    st, _, corr = llamar_api(base, "GET", "/api/concursos/activo")
+    if st != 200:
+        no_disponible(f"El punto de entrada {base} no respondió HTTP 200 antes de la falla (HTTP {st}).")
+        return False
+    ok(f"{len(replicas)} réplicas activas y entrada respondiendo HTTP 200 (Id: {corr[:8]}…).")
+
+    objetivo = replicas[0]
+    paso("2.2", f"Apagando réplica del gateway {objetivo[:12]} (docker stop)")
+    detenido, err = docker_cmd("stop", objetivo)
+    if not detenido:
+        fallo(f"No se pudo detener {objetivo[:12]}: {err}")
+        return False
+    ok(f"Réplica {objetivo[:12]} detenida.")
+
+    try:
+        paso("2.3", "Enviando 8 peticiones por la entrada con una réplica apagada")
+        exitos = 0
+        for i in range(1, 9):
             t0 = time.time()
-            st, _, corr = llamar_api(base, "GET", "/api/concursos/activo")
+            st_p, _, corr_p = llamar_api(base, "GET", "/api/concursos/activo")
             ms = int((time.time() - t0) * 1000)
-            info(f"Petición {i}/5 -> HTTP {st} ({ms} ms, Id: {corr[:8]}…)")
-        else:
-            info(f"Petición {i}/5 recibida por el balanceador -> Gateway réplica balanceada (200 OK)")
-        time.sleep(0.3)
-
-    imprimir_paso("2.3", "FALLA INDUCIDA: Deteniendo repentinamente Gateway Réplica 1 (docker stop)")
-    alerta("¡Gateway Réplica 1 APAGADO! (simulando corte de proceso / nodo caído)")
-    time.sleep(1)
-
-    imprimir_paso("2.4", "Enviando ráfaga de peticiones durante la falla de la Réplica 1")
-    fallas_visibles = 0
-    peticiones_exitosas = 0
-
-    for i in range(1, 9):
-        id_corr = str(uuid.uuid4())
-        info(f"Petición cliente {i}: GET /api/concursos/activo (Id: {id_corr[:8]}…)")
-        if en_vivo:
-            t0 = time.time()
-            st, _, _ = llamar_api(base, "GET", "/api/concursos/activo", id_correlacion=id_corr)
-            ms = int((time.time() - t0) * 1000)
-            if st == 200:
-                peticiones_exitosas += 1
-                ok(f"  -> Atendida con éxito por Gateway superviviente (HTTP 200 OK, {ms} ms)")
+            if st_p == 200:
+                exitos += 1
+                ok(f"Petición {i}/8 -> HTTP 200 ({ms} ms, Id: {corr_p[:8]}…)")
             else:
-                fallas_visibles += 1
-                fallo(f"  -> Respuesta inesperada HTTP {st} ({ms} ms)")
-        else:
-            time.sleep(0.2)
-            peticiones_exitosas += 1
-            ok(f"  -> Atendida con éxito por Gateway Réplica 2 (HTTP 200 OK, {12 + i} ms)")
+                fallo(f"Petición {i}/8 -> HTTP {st_p} ({ms} ms, Id: {corr_p[:8]}…)")
 
-    imprimir_paso("2.5", "Verificación de impacto para el usuario")
-    ok(f"Peticiones atendidas con éxito: {peticiones_exitosas}/8 (100% de disponibilidad)")
-    ok(f"Errores 5xx observados por el cliente: {fallas_visibles} (Cero tiempo de inactividad)")
-    info("Conclusión: La redundancia en réplicas del gateway evita el punto único de falla.")
-    print("\n  >> Resultado Caso 2: SUPERADO con éxito.\n")
+        if exitos == 8:
+            ok("8/8 peticiones atendidas sin interrupción por la réplica superviviente.")
+            return True
+        fallo(f"Solo {exitos}/8 peticiones tuvieron éxito tras apagar la réplica.")
+        return False
+    finally:
+        info(f"Restaurando réplica {objetivo[:12]}...")
+        docker_cmd("start", objetivo)
 
 
 # -----------------------------------------------------------------------------
 # CASO 3: Ver salir de Eureka a una instancia caída
 # -----------------------------------------------------------------------------
-def demo_caso_3(base, simulado=False):
-    imprimir_encabezado("CASO 3: Ver salir de Eureka a una instancia caída")
-    print("Objetivo: Demostrar la detección de salud en el directorio de servicios Eureka:")
-    print("  1. Una instancia registrada emite latidos (heartbeats).")
-    print("  2. Si la instancia cae sin avisar, deja de enviar latidos.")
-    print("  3. Al expirar el tiempo de arrendamiento, Eureka la expulsa del registro.")
-    print("  4. El Gateway actualiza su tabla y deja de enviar peticiones a la instancia caída.\n")
+def caso_3_eureka(eureka_url, espera_s):
+    encabezado("CASO 3: Ver salir de Eureka a una instancia caída")
 
-    imprimir_paso("3.1", "Consultando registro actual en Eureka (Directorio de Servicios)")
-    eureka_url = os.environ.get("EUREKA_URL", "http://localhost:8761")
-    st_eureka, _, _ = (0, None, "") if simulado else llamar_api(eureka_url, "GET", "/eureka/apps", timeout=2)
-    if st_eureka == 200:
-        ok(f"Eureka Server en vivo respondiendo en {eureka_url}/eureka/apps (HTTP 200 OK).")
-    else:
-        info(f"Eureka en {eureka_url} no accesible en vivo; mostrando registro de demostración.")
-    info("GET /eureka/apps/ENVIOS-SERVICE")
-    print("      +-------------------------------------------------------------+")
-    print("      | Instancia: envios-service-instancia-1                       |")
-    print("      | Estado:    UP                                               |")
-    print("      | IP/Puerto: 172.28.0.5:8081                                  |")
-    print("      | Lease:     Último latido hace 2 s (expira en 10 s)          |")
-    print("      +-------------------------------------------------------------+")
-    ok("Instancia registrada y saludable en Eureka.")
+    paso("3.1", f"Consultando directorio Eureka en {eureka_url}/eureka/apps")
+    st, datos, _ = llamar_api(eureka_url, "GET", "/eureka/apps", timeout=3)
+    if st != 200 or not isinstance(datos, dict):
+        no_disponible(f"Eureka no está disponible en {eureka_url} (HTTP {st}).")
+        return False
 
-    imprimir_paso("3.2", "FALLA INDUCIDA: La instancia 'envios-service-instancia-1' muere abruptamente")
-    alerta("¡Contenedor detenido! No hubo llamada a Eureka de desregistro (corte abrupto).")
-    info("El temporizador de renovación de Eureka comienza a correr...")
+    apps = datos.get("applications", {}).get("application", [])
+    if isinstance(apps, dict):
+        apps = [apps]
+    if not apps:
+        no_disponible("Eureka respondió 200, pero no hay ninguna instancia registrada.")
+        return False
 
-    imprimir_paso("3.3", "Monitoreando latidos en Eureka")
-    for seg in (1, 3, 5, 8, 10):
-        info(f"Tiempo sin recibir latido: {seg} s (límite de renovación: 10 s)")
-        time.sleep(0.4)
+    # Mostrar instancias reales y buscar un contenedor que podamos detener
+    objetivo_app = None
+    objetivo_instancia = None
+    objetivo_contenedor = None
 
-    imprimir_paso("3.4", "Eureka detecta expiración de lease y expulsa la instancia")
-    alerta("Eureka Eviction Timer disparado: 'envios-service-instancia-1' marcado como DOWN / Expulsado.")
-    print("      +-------------------------------------------------------------+")
-    print("      | Directorio Eureka actualizado:                              |")
-    print("      | ENVIOS-SERVICE: [Instancia 2: UP] (Instancia 1 DESREGISTRADA)|")
-    print("      +-------------------------------------------------------------+")
-    ok("Instancia caída expulsada del registro de Eureka.")
+    for app in apps:
+        nombre = app.get("name", "")
+        instancias = app.get("instance", [])
+        if isinstance(instancias, dict):
+            instancias = [instancias]
+        for inst in instancias:
+            iid = inst.get("instanceId", "")
+            estado = inst.get("status", "")
+            info(f"Registrada en Eureka: {nombre} | {iid} | status={estado}")
+            if not objetivo_contenedor and estado == "UP":
+                cands = contenedores_de(nombre.lower())
+                if cands:
+                    objetivo_app = nombre
+                    objetivo_instancia = iid
+                    objetivo_contenedor = cands[0]
 
-    imprimir_paso("3.5", "El Gateway actualiza su caché de rutas desde Eureka")
-    ok("El Gateway consulta Eureka y enruta exclusivamente a las instancias sanas.")
-    ok("Se previenen errores 500/502 antes de que impacten a los usuarios.")
-    print("\n  >> Resultado Caso 3: SUPERADO con éxito.\n")
+    if not objetivo_contenedor:
+        no_disponible("No se encontró un contenedor Docker activo asociado a una instancia UP en Eureka.")
+        return False
+
+    paso("3.2", f"Deteniendo instancia '{objetivo_instancia}' (contenedor {objetivo_contenedor[:12]})")
+    detenido, err = docker_cmd("stop", objetivo_contenedor)
+    if not detenido:
+        fallo(f"No se pudo detener el contenedor {objetivo_contenedor[:12]}: {err}")
+        return False
+
+    try:
+        paso("3.3", f"Esperando a que Eureka saque la instancia caída (máx. {espera_s} s)")
+        fin = time.time() + espera_s
+        salio = False
+        while time.time() < fin:
+            st_e, datos_e, _ = llamar_api(eureka_url, "GET", "/eureka/apps", timeout=3)
+            presente_up = False
+            if st_e == 200 and isinstance(datos_e, dict):
+                apps_e = datos_e.get("applications", {}).get("application", [])
+                if isinstance(apps_e, dict):
+                    apps_e = [apps_e]
+                for app in apps_e:
+                    if app.get("name") == objetivo_app:
+                        insts = app.get("instance", [])
+                        if isinstance(insts, dict):
+                            insts = [insts]
+                        for inst in insts:
+                            if inst.get("instanceId") == objetivo_instancia and inst.get("status") == "UP":
+                                presente_up = True
+            if not presente_up:
+                salio = True
+                break
+            info("Instancia aún figura como UP en Eureka; esperando expiración de heartbeat…")
+            time.sleep(2)
+
+        if salio:
+            ok(f"Instancia '{objetivo_instancia}' salió del estado UP en Eureka.")
+            return True
+
+        fallo(f"La instancia '{objetivo_instancia}' siguió figurando UP tras {espera_s} s.")
+        return False
+    finally:
+        info(f"Restaurando contenedor {objetivo_contenedor[:12]}...")
+        docker_cmd("start", objetivo_contenedor)
 
 
-# -----------------------------------------------------------------------------
-# MAIN
-# -----------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--base", default="http://localhost:8080", help="URL base del Gateway")
-    parser.add_argument("--caso", type=int, choices=[1, 2, 3], help="Número de caso específico (1, 2 o 3)")
-    parser.add_argument("--todos", action="store_true", help="Ejecutar los 3 casos en secuencia")
-    parser.add_argument("--simulado", action="store_true", help="Modo simulación visual paso a paso")
-
+    parser.add_argument(
+        "--eureka",
+        default=os.environ.get("EUREKA_URL", "http://localhost:8761"),
+        help="URL base de Eureka Server",
+    )
+    parser.add_argument("--caso", type=int, choices=[1, 2, 3], help="Ejecutar solo un caso (1, 2 o 3)")
+    parser.add_argument("--todos", action="store_true", help="Ejecutar los 3 casos")
+    parser.add_argument("--espera", type=int, default=60, help="Segundos máximos de espera por caso")
     args = parser.parse_args()
+
     base = args.base.rstrip("/")
+    eureka = args.eureka.rstrip("/")
 
-    imprimir_encabezado("DISTRINUBS · DEMOSTRACIÓN DE MANEJO DE FALLAS (ETAPA 2)")
-    print(f"URL de prueba: {base}")
-    print(f"Fecha y hora:  {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Responsable:   Diego Contreras (@diegocontrras)")
+    encabezado("DISTRINUBS · DEMO DE FALLAS REALES (PASO 4)")
+    print(f"Gateway: {base}")
+    print(f"Eureka:  {eureka}")
 
-    if args.caso == 1:
-        demo_caso_1(base, simulado=args.simulado)
-    elif args.caso == 2:
-        demo_caso_2(base, simulado=args.simulado)
-    elif args.caso == 3:
-        demo_caso_3(base, simulado=args.simulado)
-    else:
-        # Por omisión o con --todos, corre los tres casos
-        demo_caso_1(base, simulado=args.simulado)
-        time.sleep(1)
-        demo_caso_2(base, simulado=args.simulado)
-        time.sleep(1)
-        demo_caso_3(base, simulado=args.simulado)
+    resultados = {}
+    if args.caso in (None, 1) or args.todos:
+        resultados["Caso 1 (Worker)"] = caso_1_worker(base, args.espera)
+    if args.caso in (None, 2) or args.todos:
+        resultados["Caso 2 (Gateway)"] = caso_2_gateway(base)
+    if args.caso in (None, 3) or args.todos:
+        resultados["Caso 3 (Eureka)"] = caso_3_eureka(eureka, args.espera)
 
-    imprimir_encabezado("RESUMEN DE LA DEMOSTRACIÓN DE FALLAS")
-    print("  [x] Caso 1: Worker muerto a media evaluación -> Lease expirado y reevaluación limpia.")
-    print("  [x] Caso 2: Réplica de Gateway apagada -> Balanceador mantiene 100% de disponibilidad.")
-    print("  [x] Caso 3: Instancia caída en Eureka -> Desregistro automático por latido expirado.")
-    print("\nLos 3 casos del Paso 4 fueron demostrados conforme a los requisitos de la rúbrica.\n")
+    encabezado("RESUMEN REAL OBSERVADO")
+    todos_ok = True
+    for nombre, exito in resultados.items():
+        etiqueta = "PASÓ" if exito else "NO SUPERADO / NO DISPONIBLE"
+        print(f"  - {nombre}: {etiqueta}")
+        if not exito:
+            todos_ok = False
+
+    if not todos_ok:
+        print("\nAl menos un caso no se pudo comprobar o falló. Revisa los detalles arriba.\n")
+        sys.exit(1)
+
+    print("\nTodos los casos ejecutados pasaron sobre el sistema real.\n")
 
 
 if __name__ == "__main__":

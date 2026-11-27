@@ -87,9 +87,9 @@ flowchart LR
    - **Decisión:** Implementar un filtro `OncePerRequestFilter` (`FiltroCorrelacion`) que inserta `idCorrelacion` en el MDC de SLF4J y lo incluye en el patrón de consola, junto con Spring Boot Actuator (`health`, `info`, `metrics`) y una vista dedicada en `/api/observabilidad/estado` consumida por el front.
    - **Alternativas descartadas:** Desplegar desde el primer corte la pila completa de Prometheus, Grafana y Jaeger, ya que consume más memoria en una sola máquina y queda como opcional una vez estable lo obligatorio.
 
-3. **Script de demostración de fallas reproducible en modo vivo y simulado (`scripts/demo_fallas.py`)**
-   - **Decisión:** Construir un script en Python estándar (sin dependencias externas) capaz de ejecutar los 3 casos del paso 4 contra el sistema levantado y con respaldo de trazado paso a paso (`--simulado`) para ensayos y verificación sin Docker activo.
-   - **Alternativas descartadas:** Demostrar las fallas únicamente ejecutando comandos ad-hoc en terminal durante la presentación, lo cual es propenso a errores de tiempo y difícil de repetir por el equipo.
+3. **Script de demostración de fallas reales (`scripts/demo_fallas.py`)**
+   - **Decisión:** Construir un script en Python estándar (sin dependencias externas) que provoca las fallas reales sobre los contenedores de Docker (`docker kill` / `docker stop`) y verifica el resultado observando las respuestas HTTP y el registro de Eureka. Si alguna pieza (`gateway`, `evaluacion` en réplicas o Eureka) no existe o no responde, el script lo informa como `NO DISPONIBLE` y termina con error sin simular éxitos.
+   - **Alternativas descartadas:** Imprimir salidas simuladas o ejecutar comandos ad-hoc en terminal durante la presentación, lo cual no demuestra tolerancia a fallas real ni es reproducible.
 
 ---
 
@@ -126,7 +126,7 @@ Requisito: Docker y Docker Compose (opcionalmente Python 3 en el host para ejecu
    python3 scripts/demo.py
    python3 scripts/demo_fallas.py --todos
    ```
-   *(En Windows usar `python` en lugar de `python3`. Para ejecutar la demo de fallas sin contenedores levantados, agregar `--simulado`.)*
+   *(En Windows usar `python` en lugar de `python3`. El script provoca fallas reales sobre los contenedores; si falta alguna pieza como réplicas de gateway, workers o Eureka, reporta `NO DISPONIBLE`.)*
 
 4. **Ejecutar pruebas unitarias dentro de Docker:**
    ```bash
@@ -139,16 +139,14 @@ Requisito: Docker y Docker Compose (opcionalmente Python 3 en el host para ejecu
 ## 6. Quién hizo qué · Parte de Diego Contreras (`@diegocontrras`)
 
 - **Frontend adaptado al Gateway y Login (`src/main/resources/static/`):**
-  - Pantalla de inicio de sesión (`POST /api/auth/login`) con envío automático de `Authorization: Bearer <token>` y `X-Correlation-Id` en cada petición.
+  - Pantalla de inicio de sesión apuntando al contrato `POST /api/auth/login` con envío automático de `Authorization: Bearer <token>` y `X-Correlation-Id` en cada petición.
   - Manejo visual de fallas del Gateway/servicios (502, 503, 504, timeout y red).
-  - Selector de lenguajes para Python 3, C++, C, Java (`Main`) y JavaScript con plantillas.
-  - Diseño de editor de código al costado del enunciado (estilo LeetCode) y panel de observabilidad de servicios.
-- **Autenticación de apoyo para el contrato (`mx.distrinubs.iniciosesion`):**
-  - `TokenService`, `AuthController`, `LoginRequest`, `LoginResponse`, `SesionUsuario` y pruebas (`TokenServiceTest`, `AuthControllerTest`).
+  - Selector de lenguajes para Python 3, C++, C, Java (`Main`) y JavaScript con plantillas (pendiente soporte en `envios` y `evaluacion`).
+  - Diseño de editor de código al costado del enunciado y panel de observabilidad de servicios.
 - **Observabilidad mínima (`mx.distrinubs.observabilidad` y `application.yml`):**
-  - `FiltroCorrelacion` (MDC + encabezado `X-Correlation-Id`), patrón de logs con `%X{idCorrelacion}`, `DistrinubsHealthIndicator` para Actuator y `EstadoServiciosController` (`/api/observabilidad/estado`), con pruebas (`FiltroCorrelacionTest`, `EstadoServiciosControllerTest`).
+  - `FiltroCorrelacion` (MDC + encabezado `X-Correlation-Id`, limpiando caracteres inválidos antes de recortar), patrón de logs con `%X{idCorrelacion}`, `DistrinubsHealthIndicator` para Actuator y `EstadoServiciosController` (`/api/observabilidad/estado` consultando health configurado o reportando `NO_DISPONIBLE`, sin leer tablas de otros módulos), con pruebas (`FiltroCorrelacionTest`, `EstadoServiciosControllerTest`).
 - **Demo de fallas (`scripts/demo_fallas.py`):**
-  - Script automatizado para los 3 casos del Paso 4.
+  - Script automatizado para provocar y verificar los 3 casos del Paso 4 contra Docker y Eureka.
 
 ---
 

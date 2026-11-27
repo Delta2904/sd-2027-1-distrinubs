@@ -1,11 +1,20 @@
 package mx.distrinubs.observabilidad;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
+import javax.sql.DataSource;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,138 +22,142 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Controlador de observabilidad que entrega la vista del estado de los servicios (Paso 7).
  *
- * <p>Proporciona {@code GET /api/observabilidad/estado} para consumo del front
- * y de herramientas de monitoreo.
+ * <p>No consulta tablas de otros módulos: verifica la conectividad propia y, para los
+ * servicios separados, consulta su endpoint {@code /actuator/health} si está configurado,
+ * o reporta {@code NO_DISPONIBLE} mientras el servicio no exista o no esté configurado.
  */
 @RestController
 @RequestMapping("/api/observabilidad")
 public class EstadoServiciosController {
 
-    private final JdbcTemplate jdbc;
-    private final int workersConfigurados;
+    private static final Duration TIMEOUT_SONDEO = Duration.ofMillis(1500);
 
+    private final DataSource dataSource;
+    private final HttpClient httpClient;
+    private final Map<String, String> urlsServicios;
+
+    @Autowired
     public EstadoServiciosController(
-            JdbcTemplate jdbc,
-            @Value("${evaluacion.workers:2}") int workersConfigurados) {
-        this.jdbc = jdbc;
-        this.workersConfigurados = workersConfigurados;
+            DataSource dataSource,
+            @Value("${observabilidad.servicios.gateway:}") String gatewayUrl,
+            @Value("${observabilidad.servicios.identidad:}") String identidadUrl,
+            @Value("${observabilidad.servicios.envios:}") String enviosUrl,
+            @Value("${observabilidad.servicios.evaluacion:}") String evaluacionUrl,
+            @Value("${observabilidad.servicios.concursos:}") String concursosUrl,
+            @Value("${observabilidad.servicios.marcador:}") String marcadorUrl,
+            @Value("${observabilidad.servicios.directorio:}") String directorioUrl,
+            @Value("${observabilidad.servicios.mensajeria:}") String mensajeriaUrl) {
+        this(
+                dataSource,
+                HttpClient.newBuilder().connectTimeout(TIMEOUT_SONDEO).build(),
+                Map.of(
+                        "gateway", gatewayUrl,
+                        "identidad", identidadUrl,
+                        "envios", enviosUrl,
+                        "evaluacion", evaluacionUrl,
+                        "concursos", concursosUrl,
+                        "marcador", marcadorUrl,
+                        "directorio", directorioUrl,
+                        "mensajeria", mensajeriaUrl));
+    }
+
+    EstadoServiciosController(DataSource dataSource, HttpClient httpClient, Map<String, String> urlsServicios) {
+        this.dataSource = dataSource;
+        this.httpClient = httpClient;
+        this.urlsServicios = urlsServicios;
     }
 
     @GetMapping("/estado")
     public EstadoServiciosResponse obtenerEstado() {
-        long inicioBd = System.currentTimeMillis();
-        boolean bdOk = false;
-        long latenciaBd = 0;
-        int enviosEnCola = 0;
-        int leasesActivos = 0;
-        int totalCuentas = 0;
-        String nombreConcurso = "Ninguno abierto";
-
-        try {
-            Integer uno = jdbc.queryForObject("SELECT 1", Integer.class);
-            latenciaBd = System.currentTimeMillis() - inicioBd;
-            bdOk = uno != null && uno == 1;
-
-            Integer enCola = jdbc.queryForObject(
-                    "SELECT count(*) FROM envios WHERE estado = 'EN_COLA'", Integer.class);
-            enviosEnCola = enCola != null ? enCola : 0;
-
-            Integer leases = jdbc.queryForObject(
-                    "SELECT count(*) FROM leases_evaluacion WHERE vence_en > now()", Integer.class);
-            leasesActivos = leases != null ? leases : 0;
-
-            Integer cuentas = jdbc.queryForObject(
-                    "SELECT count(*) FROM cuentas", Integer.class);
-            totalCuentas = cuentas != null ? cuentas : 0;
-
-            List<String> concursos = jdbc.query(
-                    "SELECT nombre FROM concursos WHERE estado = 'ABIERTO' ORDER BY id DESC LIMIT 1",
-                    (rs, row) -> rs.getString("nombre"));
-            if (!concursos.isEmpty()) {
-                nombreConcurso = concursos.get(0);
-            }
-        } catch (Exception e) {
-            bdOk = false;
-        }
-
         List<EstadoServiciosResponse.ServicioDetalle> servicios = new ArrayList<>();
 
-        // 1. Gateway
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "gateway",
-                "infraestructura",
-                "UP",
-                2,
-                2,
-                "Spring Cloud Gateway en 2 réplicas detrás de balanceador nginx con least_conn"));
+        // 1. Base de datos local (solo verifica conexión sin leer tablas de otros módulos)
+        servicios.add(verificarBaseDatos());
 
-        // 2. Identidad
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "identidad",
-                "servicio",
-                "UP",
-                1,
-                1,
-                "Autenticación activa, emisión de tokens con sub, rol y exp"));
+        // 2. Servicios e infraestructura separados: consultan su health si existen, si no NO_DISPONIBLE
+        servicios.add(consultarServicio("gateway", "infraestructura", "/actuator/health"));
+        servicios.add(consultarServicio("identidad", "servicio", "/actuator/health"));
+        servicios.add(consultarServicio("envios", "servicio", "/actuator/health"));
+        servicios.add(consultarServicio("evaluacion", "servicio", "/actuator/health"));
+        servicios.add(consultarServicio("concursos", "servicio", "/actuator/health"));
+        servicios.add(consultarServicio("marcador", "servicio", "/actuator/health"));
+        servicios.add(consultarServicio("directorio", "infraestructura", "/actuator/health"));
+        servicios.add(consultarServicio("mensajeria", "infraestructura", ""));
 
-        // 3. Envíos
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "envios",
-                "servicio",
-                bdOk ? "UP" : "DEGRADADO",
-                1,
-                latenciaBd + 1,
-                "Recepción idempotente por intentoId"));
+        int activos = 0;
+        int caidos = 0;
+        int noDisponibles = 0;
+        for (var s : servicios) {
+            switch (s.estado()) {
+                case "UP" -> activos++;
+                case "DOWN" -> caidos++;
+                default -> noDisponibles++;
+            }
+        }
 
-        // 4. Evaluación
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "evaluacion",
-                "servicio",
-                bdOk ? "UP" : "DEGRADADO",
-                workersConfigurados,
-                latenciaBd,
-                workersConfigurados + " workers con lease, veredicto único y tope de 3 tomas"));
+        String global = caidos > 0 ? "DEGRADADO" : (activos > 0 ? "UP" : "NO_DISPONIBLE");
+        var resumen = new EstadoServiciosResponse.ResumenServicios(activos, caidos, noDisponibles);
 
-        // 5. Concursos
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "concursos",
-                "servicio",
-                bdOk ? "UP" : "DEGRADADO",
-                1,
-                latenciaBd,
-                "Concurso activo: " + nombreConcurso));
+        return new EstadoServiciosResponse(Instant.now(), global, servicios, resumen);
+    }
 
-        // 6. Base de datos PostgreSQL
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "basedatos",
-                "datos",
-                bdOk ? "UP" : "DOWN",
-                1,
-                latenciaBd,
-                bdOk ? "PostgreSQL 17 respondiendo consultas" : "Sin conexión a PostgreSQL"));
+    private EstadoServiciosResponse.ServicioDetalle verificarBaseDatos() {
+        long inicio = System.currentTimeMillis();
+        try (Connection conn = dataSource.getConnection()) {
+            boolean valida = conn != null && conn.isValid(2);
+            long latencia = System.currentTimeMillis() - inicio;
+            return new EstadoServiciosResponse.ServicioDetalle(
+                    "basedatos",
+                    "datos",
+                    valida ? "UP" : "DOWN",
+                    1,
+                    latencia,
+                    valida ? "Conexión PostgreSQL activa" : "Conexión PostgreSQL inválida");
+        } catch (Exception e) {
+            long latencia = System.currentTimeMillis() - inicio;
+            return new EstadoServiciosResponse.ServicioDetalle(
+                    "basedatos",
+                    "datos",
+                    "DOWN",
+                    0,
+                    latencia,
+                    "Sin conexión a PostgreSQL: " + e.getMessage());
+        }
+    }
 
-        // 7. Directorio de servicios Eureka
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "directorio",
-                "infraestructura",
-                "UP",
-                1,
-                3,
-                "Eureka Server: registro y latido de instancias"));
+    private EstadoServiciosResponse.ServicioDetalle consultarServicio(
+            String nombre, String tipo, String rutaHealth) {
+        String urlBase = urlsServicios.getOrDefault(nombre, "");
+        if (urlBase == null || urlBase.isBlank()) {
+            return new EstadoServiciosResponse.ServicioDetalle(
+                    nombre,
+                    tipo,
+                    "NO_DISPONIBLE",
+                    0,
+                    0,
+                    "Servicio separado no configurado o pendiente de despliegue");
+        }
 
-        // 8. Mensajería RabbitMQ
-        servicios.add(new EstadoServiciosResponse.ServicioDetalle(
-                "mensajeria",
-                "infraestructura",
-                "UP",
-                1,
-                2,
-                "Cola de envíos con reentrega y confirmación"));
-
-        String global = bdOk ? "UP" : "DEGRADADO";
-        var metricas = new EstadoServiciosResponse.MetricasSistema(
-                enviosEnCola, leasesActivos, totalCuentas, nombreConcurso);
-
-        return new EstadoServiciosResponse(Instant.now(), global, servicios, metricas);
+        String destino = urlBase.replaceAll("/+$", "") + rutaHealth;
+        long inicio = System.currentTimeMillis();
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(destino))
+                    .timeout(TIMEOUT_SONDEO)
+                    .GET()
+                    .build();
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            long latencia = System.currentTimeMillis() - inicio;
+            if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
+                return new EstadoServiciosResponse.ServicioDetalle(
+                        nombre, tipo, "UP", 1, latencia, "Respondió HTTP " + resp.statusCode() + " en " + destino);
+            }
+            return new EstadoServiciosResponse.ServicioDetalle(
+                    nombre, tipo, "DOWN", 0, latencia, "Respondió HTTP " + resp.statusCode() + " en " + destino);
+        } catch (Exception e) {
+            long latencia = System.currentTimeMillis() - inicio;
+            return new EstadoServiciosResponse.ServicioDetalle(
+                    nombre, tipo, "DOWN", 0, latencia, "No responde en " + destino + ": " + e.getMessage());
+        }
     }
 }

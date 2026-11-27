@@ -106,14 +106,14 @@ Después:
 ### Diego: el front, la demo de fallas y la observabilidad
 
 Primero:
-- [x] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde.
-- [x] Pantalla de inicio de sesión (paso 3), con el token en cada petición.
+- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde. *(Parcial: manejo de errores 502/503/504/red y rutas listos en el front; pendiente que exista el gateway real).*
+- [ ] Pantalla de inicio de sesión (paso 3), con el token en cada petición. *(Parcial: pantalla y envío de `Authorization: Bearer` apuntando a `POST /api/auth/login` listos; pendiente el servicio `identidad` de Enrique).*
 
 Después:
-- [x] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno.
-- [x] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios.
-- [x] Selector de lenguaje en el front (paso 8).
-- [x] Opcional: editor de código al costado del enunciado, junto con el front en React.
+- [ ] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno. *(Script `scripts/demo_fallas.py` implementado; pendiente verificarlo de punta a punta cuando existan `evaluacion`, `gateway` y Eureka).*
+- [ ] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios. *(Parcial: `FiltroCorrelacion`, Actuator y `/api/observabilidad/estado` listos; los servicios aún no separados reportan `NO_DISPONIBLE` hasta configurar su URL de health).*
+- [ ] Selector de lenguaje en el front (paso 8). *(Parcial: selector y plantillas en el front listos; `envios` y `evaluacion` todavía solo aceptan `PYTHON3`).*
+- [ ] Opcional: editor de código al costado del enunciado, junto con el front en React. *(Parcial: editor al costado del enunciado agregado en el front HTML/JS; falta decidir si se migra a React).*
 
 ## Contratos que se fijan el primer día
 

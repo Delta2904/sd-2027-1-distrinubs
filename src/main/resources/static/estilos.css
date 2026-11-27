@@ -454,6 +454,11 @@ tr:nth-child(even) {
   color: #b91c1c;
 }
 
+.estado-no_disponible {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
 .servicio-detalle {
   font-size: 0.82rem;
   color: #4b5563;

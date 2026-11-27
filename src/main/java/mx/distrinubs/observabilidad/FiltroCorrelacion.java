@@ -47,10 +47,12 @@ public class FiltroCorrelacion extends OncePerRequestFilter {
         if (idCorrelacion == null || idCorrelacion.isBlank()) {
             idCorrelacion = UUID.randomUUID().toString();
         } else {
-            // Sanitizar valor recibido del cliente
-            idCorrelacion = idCorrelacion.replaceAll("[^a-zA-Z0-9_-]", "").substring(0, Math.min(idCorrelacion.length(), 64));
-            if (idCorrelacion.isBlank()) {
+            // Limpiar primero caracteres inválidos y luego recortar sobre el texto limpio
+            String limpio = idCorrelacion.replaceAll("[^a-zA-Z0-9_-]", "");
+            if (limpio.isBlank()) {
                 idCorrelacion = UUID.randomUUID().toString();
+            } else {
+                idCorrelacion = limpio.substring(0, Math.min(limpio.length(), 64));
             }
         }
 

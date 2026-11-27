@@ -62,4 +62,41 @@ class FiltroCorrelacionTest {
         assertEquals(36, idGenerado.length()); // Formato UUID
         assertNull(MDC.get(FiltroCorrelacion.CLAVE_MDC));
     }
+
+    @Test
+    @DisplayName("Limpia caracteres inválidos como 'ab$$' antes de recortar sin lanzar excepción")
+    void limpiaCaracteresInvalidosSinError() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(FiltroCorrelacion.ENCABEZADO_CORRELACION, "ab$$");
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain() {
+            @Override
+            public void doFilter(jakarta.servlet.ServletRequest req, jakarta.servlet.ServletResponse res) {
+                assertEquals("ab", MDC.get(FiltroCorrelacion.CLAVE_MDC));
+            }
+        };
+
+        filtro.doFilter(request, response, chain);
+
+        assertEquals("ab", response.getHeader(FiltroCorrelacion.ENCABEZADO_CORRELACION));
+        assertNull(MDC.get(FiltroCorrelacion.CLAVE_MDC));
+    }
+
+    @Test
+    @DisplayName("Genera un UUID cuando el encabezado solo contiene caracteres inválidos")
+    void generaUuidSiSoloHayCaracteresInvalidos() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(FiltroCorrelacion.ENCABEZADO_CORRELACION, "$$$!!!");
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filtro.doFilter(request, response, chain);
+
+        String idGenerado = response.getHeader(FiltroCorrelacion.ENCABEZADO_CORRELACION);
+        assertNotNull(idGenerado);
+        assertEquals(36, idGenerado.length());
+        assertNull(MDC.get(FiltroCorrelacion.CLAVE_MDC));
+    }
 }
