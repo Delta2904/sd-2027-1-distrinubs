@@ -66,8 +66,8 @@ class EnviosControllerTest {
         header.put("typ", "JWT");
 
         ObjectNode payload = mapper.createObjectNode();
-        payload.put("sub", usuario);
-        payload.put("cuentaId", cuentaId);
+        payload.put("sub", String.valueOf(cuentaId));
+        payload.put("usuario", usuario);
         payload.put("nombre", usuario);
         payload.put("rol", rol);
         payload.put("jti", UUID.randomUUID().toString());
@@ -198,6 +198,8 @@ class EnviosControllerTest {
                 eq("print('hola')")))
                 .thenReturn(100L);
 
+        when(publicadorEnvios.publicar(100L)).thenReturn(true);
+
         String json = """
                 {
                   "problemaId": 2,
@@ -216,6 +218,9 @@ class EnviosControllerTest {
                 .andExpect(jsonPath("$.estado", equalTo("recibido")));
 
         verify(publicadorEnvios).publicar(100L);
+        verify(jdbc).update(
+                "UPDATE envios SET publicado_en = now(), veces_publicado = veces_publicado + 1 WHERE id = ?",
+                100L);
     }
 
     @Test

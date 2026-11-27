@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
+import java.util.Base64;
 import javax.sql.DataSource;
 
 import org.flywaydb.core.Flyway;
@@ -178,10 +179,10 @@ class IdentidadIntegracionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bloqueada", equalTo(true)));
 
-        // El token previo queda rechazado
+        // El token previo queda rechazado con 403 mientras la cuenta está bloqueada
         mockMvc.perform(get("/api/auth/validar")
                         .header("Authorization", "Bearer " + tokenAlumno))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
 
         // No puede volver a iniciar sesión mientras esté bloqueada
         mockMvc.perform(post("/api/auth/login")
@@ -272,5 +273,76 @@ class IdentidadIntegracionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(4)))
                 .andExpect(jsonPath("$[0].usuario", containsString("alumno")));
+    }
+
+    @Test
+    @DisplayName("El payload del token usa sub como id de cuenta en texto y expone el claim usuario")
+    void payloadTokenConSubCuentaIdYUsuario() throws Exception {
+        String token = iniciarSesion("alumno1", "distrinubs");
+        String[] partes = token.split("\\.");
+        JsonNode payload = mapper.readTree(Base64.getUrlDecoder().decode(partes[1]));
+
+        assertEquals("1", payload.get("sub").asText());
+        assertEquals("alumno1", payload.get("usuario").asText());
+        org.junit.jupiter.api.Assertions.assertFalse(payload.has("cuentaId"));
+    }
+
+    @Test
+    @DisplayName("Reiniciar la siembra conserva los cambios de rol hechos por el administrador")
+    void siembraConservaCambiosDeRol() throws Exception {
+        String tokenAdmin = iniciarSesion("admin", "distrinubs");
+
+        mockMvc.perform(patch("/api/identidad/cuentas/2/rol")
+                        .header("Authorization", "Bearer " + tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"rol": "ORGANIZADOR"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rol", equalTo("ORGANIZADOR")));
+
+        siembra.afterPropertiesSet();
+
+        String rolActual = jdbc.queryForObject("SELECT rol FROM cuentas WHERE id = 2", String.class);
+        assertEquals("ORGANIZADOR", rolActual);
+    }
+
+    @Test
+    @DisplayName("Los usuarios se normalizan a minúsculas y no se duplican por mayúsculas")
+    void usuariosUnicosSinDistinguirMayusculas() throws Exception {
+        String tokenAdmin = iniciarSesion("admin", "distrinubs");
+
+        mockMvc.perform(post("/api/identidad/cuentas")
+                        .header("Authorization", "Bearer " + tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "usuario": "NuevoUsuario",
+                                  "nombre": "Usuario Prueba",
+                                  "contrasena": "claveSegura123",
+                                  "rol": "ALUMNO"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.usuario", equalTo("nuevousuario")));
+
+        String token = iniciarSesion("NUEVOUSUARIO", "claveSegura123");
+        mockMvc.perform(get("/api/auth/yo")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.usuario", equalTo("nuevousuario")));
+
+        mockMvc.perform(post("/api/identidad/cuentas")
+                        .header("Authorization", "Bearer " + tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "usuario": "nuevousuario",
+                                  "nombre": "Otro Usuario",
+                                  "contrasena": "claveSegura123",
+                                  "rol": "ALUMNO"
+                                }
+                                """))
+                .andExpect(status().isConflict());
     }
 }

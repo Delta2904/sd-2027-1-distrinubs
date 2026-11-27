@@ -132,8 +132,10 @@ public class EnviosController {
                     lenguajeNormalizado,
                     request.codigo());
 
-            if (idGenerado != null) {
-                publicadorEnvios.publicar(idGenerado);
+            if (idGenerado != null && publicadorEnvios.publicar(idGenerado)) {
+                jdbc.update(
+                        "UPDATE envios SET publicado_en = now(), veces_publicado = veces_publicado + 1 WHERE id = ?",
+                        idGenerado);
             }
 
             return ResponseEntity.status(HttpStatus.CREATED)

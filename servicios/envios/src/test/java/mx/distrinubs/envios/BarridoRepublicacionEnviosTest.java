@@ -1,11 +1,17 @@
 package mx.distrinubs.envios;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.util.UUID;
 import javax.sql.DataSource;
 
@@ -56,44 +62,114 @@ class BarridoRepublicacionEnviosTest {
                 + "limite_memoria_mb, puntos_base) VALUES (1, 1, 'A', 'Suma', 'Suma dos enteros', 1000, 256, 100)");
 
         publicadorEnvios = mock(PublicadorEnvios.class);
-        barrido = new BarridoRepublicacionEnvios(jdbc, publicadorEnvios, 10, 50);
+        when(publicadorEnvios.publicar(anyLong())).thenReturn(true);
+        barrido = new BarridoRepublicacionEnvios(jdbc, publicadorEnvios, 10, 300, 3, 3, 50);
     }
 
-    private long insertarEnvio(int antiguedadSegundos) {
+    private long insertarEnvio(int antiguedadSegundos, Integer publicadoHaceSeg, int vecesPublicado) {
+        if (publicadoHaceSeg == null) {
+            return jdbc.queryForObject(
+                    "INSERT INTO envios (id_intento, cuenta_id, problema_id, lenguaje, codigo, llegada_en, "
+                            + "publicado_en, veces_publicado, estado) "
+                            + "VALUES (?, 1, 1, 'PYTHON3', 'print(5)', now() - (? * interval '1 second'), "
+                            + "NULL, ?, 'EN_COLA') RETURNING id",
+                    Long.class,
+                    UUID.randomUUID(),
+                    antiguedadSegundos,
+                    vecesPublicado);
+        }
         return jdbc.queryForObject(
-                "INSERT INTO envios (id_intento, cuenta_id, problema_id, lenguaje, codigo, llegada_en, estado) "
-                        + "VALUES (?, 1, 1, 'PYTHON3', 'print(5)', now() - (? * interval '1 second'), 'EN_COLA') "
-                        + "RETURNING id",
+                "INSERT INTO envios (id_intento, cuenta_id, problema_id, lenguaje, codigo, llegada_en, "
+                        + "publicado_en, veces_publicado, estado) "
+                        + "VALUES (?, 1, 1, 'PYTHON3', 'print(5)', now() - (? * interval '1 second'), "
+                        + "now() - (? * interval '1 second'), ?, 'EN_COLA') RETURNING id",
                 Long.class,
                 UUID.randomUUID(),
-                antiguedadSegundos);
+                antiguedadSegundos,
+                publicadoHaceSeg,
+                vecesPublicado);
     }
 
     @Test
-    @DisplayName("Republica envíos EN_COLA sin resultado ni lease vigente después del margen de gracia")
-    void republicaSoloPendientesSinLeaseNiResultado() {
-        long pendienteAntiguo = insertarEnvio(30);
-        insertarEnvio(1); // dentro del margen de gracia de 10 s
+    @DisplayName("Republica solo envíos vencidos sin resultado, dentro del tope de publicaciones y tomas, sin duplicar")
+    void republicaSoloPendientesElegiblesSinDuplicar() {
+        // (a) nunca publicado de 30 s: se republica
+        long nuncaPublicadoAntiguo = insertarEnvio(30, null, 0);
+        // (b) de 1 s: dentro del margen de gracia de 10 s, no se republica
+        insertarEnvio(1, null, 0);
+        // (c) publicado hace 30 s (espera menor a 300 s): no se republica
+        insertarEnvio(40, 30, 1);
+        // (d) publicado hace 400 s: supera espera máxima, se republica
+        long publicadoVencido = insertarEnvio(500, 400, 1);
 
-        long conLeaseVigente = insertarEnvio(30);
+        // (e) lease vigente: no se republica
+        long conLeaseVigente = insertarEnvio(30, null, 1);
         jdbc.update("INSERT INTO leases_evaluacion (envio_id, worker, tomado_en, vence_en, veces_tomado) "
                 + "VALUES (?, 'worker-1', now() - interval '5 seconds', now() + interval '30 seconds', 1)",
                 conLeaseVigente);
 
-        long conLeaseVencido = insertarEnvio(30);
+        // (f) lease vencido con veces_tomado = 3: tomas agotadas, no se republica
+        long conTomasAgotadas = insertarEnvio(30, null, 1);
         jdbc.update("INSERT INTO leases_evaluacion (envio_id, worker, tomado_en, vence_en, veces_tomado) "
-                + "VALUES (?, 'worker-2', now() - interval '25 seconds', now() - interval '5 seconds', 1)",
+                + "VALUES (?, 'worker-2', now() - interval '40 seconds', now() - interval '10 seconds', 3)",
+                conTomasAgotadas);
+
+        // (g) lease vencido con veces_tomado = 1 y nunca publicado: se republica
+        long conLeaseVencido = insertarEnvio(30, null, 0);
+        jdbc.update("INSERT INTO leases_evaluacion (envio_id, worker, tomado_en, vence_en, veces_tomado) "
+                + "VALUES (?, 'worker-3', now() - interval '25 seconds', now() - interval '5 seconds', 1)",
                 conLeaseVencido);
 
-        long evaluado = insertarEnvio(30);
+        // (h) con resultado: no se republica
+        long evaluado = insertarEnvio(30, null, 1);
         jdbc.update("INSERT INTO resultados (envio_id, veredicto, tiempo_ms) VALUES (?, 'ACCEPTED', 12)",
                 evaluado);
 
+        // (i) veces_publicado = 3 y publicado hace 400 s: tope de publicaciones alcanzado, no se republica
+        insertarEnvio(500, 400, 3);
+
         int republicados = barrido.republicarPendientes();
 
-        assertEquals(2, republicados);
-        verify(publicadorEnvios).publicar(pendienteAntiguo);
+        assertEquals(3, republicados);
+        verify(publicadorEnvios).publicar(nuncaPublicadoAntiguo);
+        verify(publicadorEnvios).publicar(publicadoVencido);
         verify(publicadorEnvios).publicar(conLeaseVencido);
         verifyNoMoreInteractions(publicadorEnvios);
+
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, nuncaPublicadoAntiguo));
+        assertNotNull(jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, nuncaPublicadoAntiguo));
+        assertEquals(2, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, publicadoVencido));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, conLeaseVencido));
+
+        // Una segunda corrida inmediata no debe republicar ningún envío
+        int segundaCorrida = barrido.republicarPendientes();
+        assertEquals(0, segundaCorrida);
+        verifyNoMoreInteractions(publicadorEnvios);
+    }
+
+    @Test
+    @DisplayName("Si RabbitMQ rechaza la publicación, libera publicado_en y corta el lote")
+    void liberaReclamoSiBrokerFalla() {
+        when(publicadorEnvios.publicar(anyLong())).thenReturn(false);
+
+        long primero = insertarEnvio(30, null, 0);
+        long segundo = insertarEnvio(500, 400, 1);
+
+        int publicados = barrido.republicarPendientes();
+
+        assertEquals(0, publicados);
+        verify(publicadorEnvios, times(1)).publicar(anyLong());
+        assertNull(jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, primero));
+        assertNull(jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, segundo));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, primero));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, segundo));
     }
 }

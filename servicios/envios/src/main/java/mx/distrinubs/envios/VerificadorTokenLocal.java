@@ -70,15 +70,26 @@ public class VerificadorTokenLocal {
             }
 
             String sub = json.path("sub").asText(null);
-            long cuentaId = json.path("cuentaId").asLong(0);
-            if (sub == null || sub.isBlank() || cuentaId <= 0) {
+            if (sub == null || sub.isBlank()) {
+                return null;
+            }
+            long cuentaId;
+            try {
+                cuentaId = Long.parseLong(sub.trim());
+            } catch (NumberFormatException e) {
                 return null;
             }
 
+            String usuario = json.path("usuario").asText("");
+            if (cuentaId <= 0 || usuario.isBlank()) {
+                return null;
+            }
+
+            String nombre = json.path("nombre").asText(usuario);
             return new SesionAutenticada(
                     cuentaId,
-                    sub,
-                    json.path("nombre").asText(sub),
+                    usuario,
+                    nombre,
                     json.path("rol").asText("ALUMNO"),
                     exp,
                     json.path("jti").asText(""));

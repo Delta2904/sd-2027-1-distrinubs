@@ -1,7 +1,7 @@
 package mx.distrinubs.envios;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -20,7 +20,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 class ConfiguracionRabbitMQTest {
 
     @Test
-    @DisplayName("La cola principal es durable y apunta al exchange y routing key de mensajes muertos (DLQ)")
+    @DisplayName("La cola principal es quorum durable con límite de entregas y DLX/DLQ")
     void colaConfiguradaConDlq() {
         ConfiguracionRabbitMQ config = new ConfiguracionRabbitMQ(
                 "distrinubs.envios",
@@ -28,7 +28,8 @@ class ConfiguracionRabbitMQTest {
                 "envios.evaluacion",
                 "distrinubs.envios.dlx",
                 "envios.evaluacion.dlq",
-                "envios.evaluacion.dlq");
+                "envios.evaluacion.dlq",
+                3);
 
         Queue colaPrincipal = config.colaEnviosEvaluacion();
         Queue colaDlq = config.colaEnviosDeadLetter();
@@ -37,6 +38,8 @@ class ConfiguracionRabbitMQTest {
 
         assertEquals("envios.evaluacion", colaPrincipal.getName());
         assertTrue(colaPrincipal.isDurable());
+        assertEquals("quorum", colaPrincipal.getArguments().get("x-queue-type"));
+        assertEquals(3, ((Number) colaPrincipal.getArguments().get("x-delivery-limit")).intValue());
         assertEquals("distrinubs.envios.dlx", colaPrincipal.getArguments().get("x-dead-letter-exchange"));
         assertEquals("envios.evaluacion.dlq", colaPrincipal.getArguments().get("x-dead-letter-routing-key"));
 
@@ -47,13 +50,13 @@ class ConfiguracionRabbitMQTest {
     }
 
     @Test
-    @DisplayName("PublicadorEnviosRabbit envía el mensaje y tolera caída de RabbitMQ sin perder el envío")
+    @DisplayName("PublicadorEnviosRabbit envía el mensaje y devuelve false si RabbitMQ está caído")
     void publicadorToleraFallaDeBroker() {
         RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
         PublicadorEnviosRabbit publicador = new PublicadorEnviosRabbit(
-                rabbitTemplate, "distrinubs.envios", "envios.evaluacion", 3);
+                rabbitTemplate, "distrinubs.envios", "envios.evaluacion");
 
-        publicador.publicar(42L);
+        assertTrue(publicador.publicar(42L));
         verify(rabbitTemplate).convertAndSend(
                 org.mockito.ArgumentMatchers.eq("distrinubs.envios"),
                 org.mockito.ArgumentMatchers.eq("envios.evaluacion"),
@@ -64,6 +67,6 @@ class ConfiguracionRabbitMQTest {
                 .when(rabbitTemplate)
                 .convertAndSend(anyString(), anyString(), any(Object.class), any(MessagePostProcessor.class));
 
-        assertDoesNotThrow(() -> publicador.publicar(43L));
+        assertFalse(publicador.publicar(43L));
     }
 }

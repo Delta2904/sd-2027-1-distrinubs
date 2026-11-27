@@ -9,16 +9,17 @@ spring:
 
   flyway:
     out-of-order: true
+    ignore-migration-patterns: "*:missing,*:future"
 
 identidad:
   jwt:
-    secreto: ${JWT_SECRETO:distrinubs-secreto-compartido-etapa-02-separacion-2027}
+    secreto: ${JWT_SECRETO}
     duracion-segundos: ${JWT_DURACION_SEGUNDOS:86400}
 
 siembra:
   activa: ${SIEMBRA_ACTIVA:true}
   cuentas-carga: ${SIEMBRA_CUENTAS_CARGA:0}
-  contrasena-demo: ${SIEMBRA_CONTRASENA_DEMO:distrinubs}
+  contrasena-demo: ${SIEMBRA_CONTRASENA_DEMO}
 
 server:
   port: ${IDENTIDAD_PUERTO:8083}

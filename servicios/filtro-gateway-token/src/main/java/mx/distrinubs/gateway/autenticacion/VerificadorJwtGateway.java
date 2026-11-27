@@ -28,7 +28,7 @@ public class VerificadorJwtGateway {
 
     public VerificadorJwtGateway(
             ObjectMapper mapper,
-            @Value("${distrinubs.autenticacion.jwt-secreto:distrinubs-secreto-compartido-etapa-02-separacion-2027}") String secreto) {
+            @Value("${distrinubs.autenticacion.jwt-secreto}") String secreto) {
         if (secreto == null || secreto.isBlank()) {
             throw new IllegalArgumentException("El secreto JWT no puede estar vacío");
         }
@@ -70,15 +70,26 @@ public class VerificadorJwtGateway {
             }
 
             String sub = json.path("sub").asText(null);
-            long cuentaId = json.path("cuentaId").asLong(0);
-            if (sub == null || sub.isBlank() || cuentaId <= 0) {
+            if (sub == null || sub.isBlank()) {
+                return null;
+            }
+            long cuentaId;
+            try {
+                cuentaId = Long.parseLong(sub.trim());
+            } catch (NumberFormatException e) {
                 return null;
             }
 
+            String usuario = json.path("usuario").asText("");
+            if (cuentaId <= 0 || usuario.isBlank()) {
+                return null;
+            }
+
+            String nombre = json.path("nombre").asText(usuario);
             return new SesionGateway(
                     cuentaId,
-                    sub,
-                    json.path("nombre").asText(sub),
+                    usuario,
+                    nombre,
                     json.path("rol").asText("ALUMNO"),
                     exp,
                     json.path("jti").asText(""));

@@ -28,8 +28,7 @@ class SiembraCuentasIdentidad implements InitializingBean {
             ON CONFLICT (id) DO UPDATE
                 SET usuario         = EXCLUDED.usuario,
                     nombre          = EXCLUDED.nombre,
-                    contrasena_hash = EXCLUDED.contrasena_hash,
-                    rol             = EXCLUDED.rol
+                    contrasena_hash = COALESCE(cuentas.contrasena_hash, EXCLUDED.contrasena_hash)
             """;
 
     private static final String SEMBRAR_CUENTAS_CARGA = """
@@ -39,8 +38,7 @@ class SiembraCuentasIdentidad implements InitializingBean {
             ON CONFLICT (id) DO UPDATE
                 SET usuario         = EXCLUDED.usuario,
                     nombre          = EXCLUDED.nombre,
-                    contrasena_hash = EXCLUDED.contrasena_hash,
-                    rol             = EXCLUDED.rol
+                    contrasena_hash = COALESCE(cuentas.contrasena_hash, EXCLUDED.contrasena_hash)
             """;
 
     private final JdbcTemplate jdbc;
@@ -50,10 +48,13 @@ class SiembraCuentasIdentidad implements InitializingBean {
     SiembraCuentasIdentidad(
             JdbcTemplate jdbc,
             @Value("${siembra.cuentas-carga:0}") int cuentasCarga,
-            @Value("${siembra.contrasena-demo:distrinubs}") String contrasenaDemo) {
+            @Value("${siembra.contrasena-demo}") String contrasenaDemo) {
         if (cuentasCarga < 0 || cuentasCarga > MAXIMO_CUENTAS_CARGA) {
             throw new IllegalArgumentException(
                     "siembra.cuentas-carga debe estar entre 0 y " + MAXIMO_CUENTAS_CARGA);
+        }
+        if (contrasenaDemo == null || contrasenaDemo.isBlank()) {
+            throw new IllegalArgumentException("Falta SIEMBRA_CONTRASENA_DEMO para sembrar las cuentas");
         }
         this.jdbc = jdbc;
         this.cuentasCarga = cuentasCarga;

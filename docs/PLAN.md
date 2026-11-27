@@ -75,16 +75,18 @@ Después:
 
 Primero (paso 1):
 - [x] `envios` como servicio (`servicios/envios/`), con las mismas rutas `POST /api/envios` y `GET /api/envios/{id}`.
-- [x] Publicar en RabbitMQ después de guardar y cubrir caídas entre guardar y publicar mediante barrido periódico (`BarridoRepublicacionEnvios`).
+- [x] Publicar en RabbitMQ después de guardar y cubrir caídas entre guardar y publicar mediante barrido periódico (`BarridoRepublicacionEnvios`) que solo republica envíos nunca publicados tras el margen de gracia o ya publicados que superen la espera máxima en cola, con tope de publicaciones, exclusión de tomas agotadas y `SKIP LOCKED` para no duplicar entre réplicas.
 - [x] Mantener la idempotencia por `intentoId`.
 
 Autenticación (paso 3):
 - [x] Servicio `identidad` (`servicios/identidad/`): inicio de sesión con contraseña guardada con hash BCrypt, token JWT firmado con vencimiento, bloqueo y revocación de cuentas/tokens (`tokens_revocados`), y los roles alumno, organizador y administrador.
 - [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`) y dejar que cada alumno envíe y consulte solo lo suyo. Con eso termina la suplantación por `alumnoId`.
 - [ ] Filtro que valida el token en el gateway (`servicios/filtro-gateway-token/`): implementado y probado; pendiente integrarlo vía pull request cuando Joshua suba el servicio `gateway`.
+- [ ] Acordar con Diego los claims del token y el orden de integración con su pantalla de inicio de sesión y `scripts/demo.py` (ya acepta `--contrasena`).
 
 Después:
-- [x] Cola de mensajes muertos (`envios.evaluacion.dlq`) y tope de reintentos (`x-max-reintentos`), del lado del productor (`servicios/envios/`), pendiente coordinar consumo con Emiliano (paso 6).
+- [ ] Cola de mensajes muertos (`envios.evaluacion.dlq`) con tope de entregas (cola quorum, `x-delivery-limit` 3): lado del productor listo en `servicios/envios/`; falta el consumidor de Emiliano y probarlo de punta a punta (paso 6).
+- [ ] Acordar con Emiliano quién aplica las migraciones en Compose.
 - [ ] Redis para sesiones y revocación, si hace falta.
 
 ### Joshua: `concursos`, `gateway` y `marcador`
@@ -121,11 +123,11 @@ Son los puntos donde el trabajo de uno depende del de otro. Se acuerdan el 15/11
 
 | Contrato | Entre quién | Propuesta |
 |---|---|---|
-| Mensaje del envío a evaluar | Enrique y Emiliano | Una cola de RabbitMQ; el cuerpo lleva el `envioId`. El estado sigue en PostgreSQL |
+| Mensaje del envío a evaluar | Enrique y Emiliano | Una cola de RabbitMQ; el cuerpo lleva el `envioId`. El estado sigue en PostgreSQL; cola quorum con `x-delivery-limit` 3 y DLX hacia `envios.evaluacion.dlq` (propuesta, por confirmar con Emiliano) |
 | Mensaje del resultado | Emiliano y Joshua | `envioId`, `cuentaId`, `problemaId`, `veredicto` y `llegadaEn` |
-| Token | Enrique, Joshua y Diego | Token firmado con `sub` (la cuenta), `rol` y `exp`, en `Authorization: Bearer`; `POST /api/auth/login`. Dónde se valida está abierto en el PRD |
+| Token | Enrique, Joshua y Diego | Propuesta de Enrique, por confirmar con Joshua y Diego: JWT HS256 en `Authorization: Bearer`, emitido por `POST /api/auth/login`, con `sub` (id de la cuenta, como texto), `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs` y `exp`. Se valida en el gateway y en `envios`, consultando `GET /api/auth/validar` en `identidad`. Secreto `JWT_SECRETO`, sin valor por omisión |
 | Rutas públicas | Joshua y todos | No cambian: `/api/envios/**`, `/api/concursos/**` y `/api/cuentas-demo`. Así el front y el demo siguen igual |
-| Datos entre servicios | Los cuatro | Pregunta abierta del PRD (una base con un esquema por servicio, o una base por servicio) |
+| Datos entre servicios | Los cuatro | Propuesta de Enrique (bitácora 22), por confirmar con los cuatro: una instancia y esquema `public`, un solo escritor por tabla; cada servicio aplica las mismas migraciones con Flyway. Falta decidir en Compose quién migra |
 | Quién valida la lista de lenguajes | Emiliano y Enrique | Antes del paso 8 |
 
 ## Cómo trabajamos

@@ -13,7 +13,10 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Declara la topología de RabbitMQ del lado del productor: exchange principal,
- * cola durable de evaluación con enrutamiento de mensajes muertos (DLX/DLQ).
+ * cola quorum durable con límite de entregas ({@code x-delivery-limit}) y
+ * enrutamiento de mensajes muertos (DLX/DLQ). El broker manda el mensaje a la DLQ
+ * cuando supera el límite de entregas, sea porque el consumidor lo rechaza
+ * reencolando o porque se cae sin confirmar.
  */
 @Configuration
 public class ConfiguracionRabbitMQ {
@@ -24,6 +27,7 @@ public class ConfiguracionRabbitMQ {
     private final String dlx;
     private final String dlq;
     private final String dlqRoutingKey;
+    private final int limiteEntregas;
 
     public ConfiguracionRabbitMQ(
             @Value("${envios.mensajeria.exchange:distrinubs.envios}") String exchange,
@@ -31,13 +35,15 @@ public class ConfiguracionRabbitMQ {
             @Value("${envios.mensajeria.routing-key:envios.evaluacion}") String routingKey,
             @Value("${envios.mensajeria.dlx:distrinubs.envios.dlx}") String dlx,
             @Value("${envios.mensajeria.dlq:envios.evaluacion.dlq}") String dlq,
-            @Value("${envios.mensajeria.dlq-routing-key:envios.evaluacion.dlq}") String dlqRoutingKey) {
+            @Value("${envios.mensajeria.dlq-routing-key:envios.evaluacion.dlq}") String dlqRoutingKey,
+            @Value("${envios.mensajeria.limite-entregas:3}") int limiteEntregas) {
         this.exchange = exchange;
         this.cola = cola;
         this.routingKey = routingKey;
         this.dlx = dlx;
         this.dlq = dlq;
         this.dlqRoutingKey = dlqRoutingKey;
+        this.limiteEntregas = limiteEntregas;
     }
 
     @Bean
@@ -53,8 +59,10 @@ public class ConfiguracionRabbitMQ {
     @Bean
     public Queue colaEnviosEvaluacion() {
         return QueueBuilder.durable(cola)
-                .withArgument("x-dead-letter-exchange", dlx)
-                .withArgument("x-dead-letter-routing-key", dlqRoutingKey)
+                .quorum()
+                .deliveryLimit(limiteEntregas)
+                .deadLetterExchange(dlx)
+                .deadLetterRoutingKey(dlqRoutingKey)
                 .build();
     }
 

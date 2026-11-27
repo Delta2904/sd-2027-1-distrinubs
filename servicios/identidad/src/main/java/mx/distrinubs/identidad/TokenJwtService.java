@@ -69,8 +69,8 @@ public class TokenJwtService {
             header.put("typ", "JWT");
 
             ObjectNode payload = mapper.createObjectNode();
-            payload.put("sub", usuario);
-            payload.put("cuentaId", cuentaId);
+            payload.put("sub", String.valueOf(cuentaId));
+            payload.put("usuario", usuario);
             payload.put("nombre", nombre);
             payload.put("rol", rol != null ? rol : "ALUMNO");
             payload.put("jti", UUID.randomUUID().toString());
@@ -128,12 +128,22 @@ public class TokenJwtService {
             }
 
             String sub = json.path("sub").asText(null);
-            long cuentaId = json.path("cuentaId").asLong(0);
-            if (sub == null || sub.isBlank() || cuentaId <= 0) {
+            if (sub == null || sub.isBlank()) {
+                return null;
+            }
+            long cuentaId;
+            try {
+                cuentaId = Long.parseLong(sub.trim());
+            } catch (NumberFormatException e) {
                 return null;
             }
 
-            String nombre = json.path("nombre").asText(sub);
+            String usuario = json.path("usuario").asText("");
+            if (cuentaId <= 0 || usuario.isBlank()) {
+                return null;
+            }
+
+            String nombre = json.path("nombre").asText(usuario);
             String rol = json.path("rol").asText("ALUMNO");
             String jti = json.path("jti").asText("");
             long iatSegundos = json.path("iat").asLong(0);
@@ -141,7 +151,7 @@ public class TokenJwtService {
 
             return new DatosToken(
                     cuentaId,
-                    sub,
+                    usuario,
                     nombre,
                     rol,
                     jti,

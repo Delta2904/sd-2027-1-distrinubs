@@ -5,5 +5,8 @@ package mx.distrinubs.envios;
  */
 public interface PublicadorEnvios {
 
-    void publicar(long envioId);
+    /**
+     * Publica el envío en el broker y devuelve {@code true} si el mensaje fue aceptado.
+     */
+    boolean publicar(long envioId);
 }

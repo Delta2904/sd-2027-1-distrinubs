@@ -55,8 +55,8 @@ class FiltroAutenticacionGatewayTest {
         header.put("typ", "JWT");
 
         ObjectNode payload = mapper.createObjectNode();
-        payload.put("sub", usuario);
-        payload.put("cuentaId", cuentaId);
+        payload.put("sub", String.valueOf(cuentaId));
+        payload.put("usuario", usuario);
         payload.put("nombre", usuario);
         payload.put("rol", rol);
         payload.put("jti", UUID.randomUUID().toString());

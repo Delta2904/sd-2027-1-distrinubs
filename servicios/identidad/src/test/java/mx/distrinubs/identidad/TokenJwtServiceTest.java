@@ -6,10 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.time.Instant;
+import java.util.Base64;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 class TokenJwtServiceTest {
@@ -17,12 +19,20 @@ class TokenJwtServiceTest {
     private static final String SECRETO = "secreto-de-prueba-para-token-jwt-distrinubs";
 
     @Test
-    @DisplayName("Genera y valida un token HS256 con claims sub, cuentaId, rol, jti y exp")
-    void generaYValidaTokenCorrectamente() {
-        TokenJwtService servicio = new TokenJwtService(new ObjectMapper(), SECRETO, 3600);
+    @DisplayName("Genera y valida un token HS256 con claims sub (id), usuario, rol, jti y exp")
+    void generaYValidaTokenCorrectamente() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        TokenJwtService servicio = new TokenJwtService(mapper, SECRETO, 3600);
         Instant ahora = Instant.now();
 
         String token = servicio.generarToken(1L, "alumno1", "Alumno Uno", "ALUMNO", ahora);
+        String[] partes = token.split("\\.");
+        JsonNode payload = mapper.readTree(Base64.getUrlDecoder().decode(partes[1]));
+
+        assertEquals("1", payload.get("sub").asText());
+        assertEquals("alumno1", payload.get("usuario").asText());
+        assertFalse(payload.has("cuentaId"));
+
         TokenJwtService.DatosToken datos = servicio.validarFirmaYExpiracion("Bearer " + token);
 
         assertNotNull(datos);

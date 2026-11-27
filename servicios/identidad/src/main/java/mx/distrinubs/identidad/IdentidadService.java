@@ -127,7 +127,7 @@ public class IdentidadService {
 
         EstadoCuenta cuenta = cuentas.get(0);
         if (cuenta.bloqueada()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "La cuenta está bloqueada");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La cuenta está bloqueada");
         }
 
         if (cuenta.revocadaDesde() != null && !datos.emitidoEn().isAfter(cuenta.revocadaDesde())) {
@@ -176,7 +176,7 @@ public class IdentidadService {
     }
 
     public CuentaResumenDto crearCuenta(CrearCuentaRequest request) {
-        String usuario = request.usuario().trim();
+        String usuario = request.usuario().trim().toLowerCase(Locale.ROOT);
         String nombre = request.nombre().trim();
         String rol = (request.rol() == null || request.rol().isBlank())
                 ? "ALUMNO"

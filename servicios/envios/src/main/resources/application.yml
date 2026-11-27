@@ -7,11 +7,16 @@ spring:
     username: ${DB_USER:distrinubs}
     password: ${DB_PASSWORD:distrinubs}
 
+  flyway:
+    out-of-order: true
+    ignore-migration-patterns: "*:missing,*:future"
+
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:500ms}
 
 envios:
   lenguajes-permitidos: ${ENVIOS_LENGUAJES:PYTHON3}
@@ -22,14 +27,17 @@ envios:
     dlx: distrinubs.envios.dlx
     dlq: envios.evaluacion.dlq
     dlq-routing-key: envios.evaluacion.dlq
-    max-reintentos: 3
+    limite-entregas: ${ENVIOS_LIMITE_ENTREGAS:3}
   barrido:
     activo: ${ENVIOS_BARRIDO_ACTIVO:true}
     intervalo-ms: ${ENVIOS_BARRIDO_INTERVALO_MS:15000}
     gracia-segundos: ${ENVIOS_BARRIDO_GRACIA_SEG:10}
+    espera-maxima-cola-segundos: ${ENVIOS_BARRIDO_ESPERA_MAXIMA_SEG:300}
+    max-publicaciones: 3
+    max-tomas: 3
     lote: 50
   autenticacion:
-    jwt-secreto: ${JWT_SECRETO:distrinubs-secreto-compartido-etapa-02-separacion-2027}
+    jwt-secreto: ${JWT_SECRETO}
     identidad-url: ${IDENTIDAD_URL:http://identidad:8083}
     timeout-ms: ${IDENTIDAD_TIMEOUT_MS:2000}
 
