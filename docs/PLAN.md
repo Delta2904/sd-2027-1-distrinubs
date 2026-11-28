@@ -75,17 +75,20 @@ Después:
 ### Enrique: `envios`, mensajería e `identidad`
 
 Primero (paso 1):
-- [ ] `envios` como servicio, con las mismas rutas `POST /api/envios` y `GET /api/envios/{id}`.
-- [ ] Publicar en RabbitMQ después de guardar. Falta decidir qué pasa si el servicio cae entre guardar y publicar (barrido u outbox, pregunta abierta del PRD).
-- [ ] Mantener la idempotencia por `intentoId`.
+- [x] `envios` como servicio (`servicios/envios/`), con las mismas rutas `POST /api/envios` y `GET /api/envios/{id}`.
+- [x] Publicar en RabbitMQ después de guardar y cubrir caídas entre guardar y publicar mediante barrido periódico (`BarridoRepublicacionEnvios`) que solo republica envíos nunca publicados tras el margen de gracia o ya publicados que superen la espera máxima en cola, con tope de publicaciones, exclusión de tomas agotadas y `SKIP LOCKED` para no duplicar entre réplicas.
+- [x] Mantener la idempotencia por `intentoId`.
 
 Autenticación (paso 3):
-- [ ] Servicio `identidad`: inicio de sesión con contraseña guardada con hash, token firmado con vencimiento, bloqueo y revocación de cuentas, y los roles alumno, organizador y administrador.
-- [ ] En `envios`: rechazar la subida sin token válido y dejar que cada alumno envíe y consulte solo lo suyo. Con eso termina la suplantación por `alumnoId`.
-- [ ] Filtro que valida el token en el gateway. El gateway es de Joshua: el filtro entra con un pull request que él revisa.
+- [x] Servicio `identidad` (`servicios/identidad/`): inicio de sesión con contraseña guardada con hash BCrypt, token JWT firmado con vencimiento, bloqueo y revocación de cuentas/tokens (`tokens_revocados`), y los roles alumno, organizador y administrador.
+- [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`), rechazar `alumnoId` ajeno para cualquier rol y dejar que cada usuario consulte según su dueño o supervisión. Con eso termina la suplantación por `alumnoId`.
+- [x] Filtro que valida el token, ya integrado en `servicios/gateway/`: las rutas públicas son una lista exacta, rechaza las rutas sin normalizar, aísla los errores de `identidad` respecto a los backends aguas abajo y propaga `X-Usuario-Id`, `X-Usuario-Login` y `X-Usuario-Rol`. El gateway ya manda `/api/cuentas-demo` a `identidad`, que lista solo las cuentas de alumno no bloqueadas. Está cubierto con las pruebas de cada servicio.
+- [ ] Probar la autenticación de punta a punta con el Compose (front, gateway, `identidad` y `envios`): todavía no se ha hecho.
+- [ ] Acordar con Diego los claims del token y el orden de integración con su pantalla de inicio de sesión y `scripts/demo.py` (ya acepta `--contrasena`).
 
 Después:
-- [ ] Cola de mensajes muertos y tope de reintentos, del lado del productor, junto con Emiliano (paso 6).
+- [ ] Cola de mensajes muertos (`envios.evaluacion.dlq`) con tope de entregas (cola quorum, `x-delivery-limit` 3): lado del productor listo en `servicios/envios/`; falta el consumidor de Emiliano y probarlo de punta a punta (paso 6).
+- [ ] Acordar con Emiliano quién aplica las migraciones en Compose.
 - [ ] Redis para sesiones y revocación, si hace falta.
 
 ### Joshua: `concursos`, `gateway` y `marcador`
@@ -122,11 +125,11 @@ Son los puntos donde el trabajo de uno depende del de otro. Se acuerdan el 15/11
 
 | Contrato | Entre quién | Propuesta |
 |---|---|---|
-| Mensaje del envío a evaluar | Enrique y Emiliano | Una cola de RabbitMQ; el cuerpo lleva el `envioId`. El estado sigue en PostgreSQL |
+| Mensaje del envío a evaluar | Enrique y Emiliano | Una cola de RabbitMQ; el cuerpo lleva el `envioId`. El estado sigue en PostgreSQL; cola quorum con `x-delivery-limit` 3 y DLX hacia `envios.evaluacion.dlq` (propuesta, por confirmar con Emiliano) |
 | Mensaje del resultado | Emiliano y Joshua | `envioId`, `cuentaId`, `problemaId`, `veredicto` y `llegadaEn` |
-| Token | Enrique, Joshua y Diego | Token firmado con `sub` (la cuenta), `rol` y `exp`, en `Authorization: Bearer`; `POST /api/auth/login`. Dónde se valida está abierto en el PRD |
+| Token | Enrique, Joshua y Diego | Propuesta de Enrique, por confirmar con Joshua y Diego: JWT HS256 en `Authorization: Bearer`, emitido por `POST /api/auth/login`, con `sub` (id de la cuenta, como texto), `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs` y `exp`. Se valida en el gateway y en `envios`, consultando `GET /api/auth/validar` en `identidad`. Secreto `JWT_SECRETO`, sin valor por omisión |
 | Rutas públicas | Joshua y todos | No cambian: `/api/envios/**`, `/api/concursos/**` y `/api/cuentas-demo`. Así el front y el demo siguen igual |
-| Datos entre servicios | Los cuatro | Pregunta abierta del PRD (una base con un esquema por servicio, o una base por servicio) |
+| Datos entre servicios | Los cuatro | Propuesta de Enrique (bitácora 25), por confirmar con los cuatro: una instancia y esquema `public`, un solo escritor por tabla; cada servicio aplica las mismas migraciones con Flyway. Falta decidir en Compose quién migra |
 | Quién valida la lista de lenguajes | Emiliano y Enrique | Antes del paso 8 |
 
 ## Cómo trabajamos

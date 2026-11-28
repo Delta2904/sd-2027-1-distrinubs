@@ -16,7 +16,7 @@ spring:
             - Path=/api/concursos/**
 
         - id: ruta-cuentas-demo
-          uri: ${RUTA_CUENTAS_DEMO_URI:lb://concursos}
+          uri: ${RUTA_CUENTAS_DEMO_URI:lb://identidad}
           predicates:
             - Path=/api/cuentas-demo/**
 
@@ -30,10 +30,21 @@ spring:
           predicates:
             - Path=/api/auth/**
 
+        - id: ruta-identidad
+          uri: ${RUTA_IDENTIDAD_URI:lb://identidad}
+          predicates:
+            - Path=/api/identidad/**
+
         - id: ruta-marcador
           uri: ${RUTA_MARCADOR_URI:lb://marcador}
           predicates:
             - Path=/api/marcador/**
+
+distrinubs:
+  autenticacion:
+    jwt-secreto: ${JWT_SECRETO}
+    identidad-url: ${IDENTIDAD_URL:http://identidad:8083}
+    timeout-ms: ${IDENTIDAD_TIMEOUT_MS:2000}
 
 eureka:
   client:

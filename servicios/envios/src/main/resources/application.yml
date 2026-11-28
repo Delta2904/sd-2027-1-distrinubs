@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: envios
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:distrinubs}
+    username: ${DB_USER:distrinubs}
+    password: ${DB_PASSWORD:distrinubs}
+
+  flyway:
+    out-of-order: true
+    ignore-migration-patterns: "*:missing,*:future"
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:500ms}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
+envios:
+  lenguajes-permitidos: ${ENVIOS_LENGUAJES:PYTHON3}
+  mensajeria:
+    exchange: distrinubs.envios
+    cola: envios.evaluacion
+    routing-key: envios.evaluacion
+    dlx: distrinubs.envios.dlx
+    dlq: envios.evaluacion.dlq
+    dlq-routing-key: envios.evaluacion.dlq
+    limite-entregas: ${ENVIOS_LIMITE_ENTREGAS:3}
+    confirm-timeout-ms: ${ENVIOS_CONFIRM_TIMEOUT_MS:1000}
+  barrido:
+    activo: ${ENVIOS_BARRIDO_ACTIVO:true}
+    intervalo-ms: ${ENVIOS_BARRIDO_INTERVALO_MS:15000}
+    gracia-segundos: ${ENVIOS_BARRIDO_GRACIA_SEG:10}
+    espera-maxima-cola-segundos: ${ENVIOS_BARRIDO_ESPERA_MAXIMA_SEG:300}
+    max-publicaciones: 3
+    max-tomas: 3
+    lote: 50
+  autenticacion:
+    jwt-secreto: ${JWT_SECRETO}
+    identidad-url: ${IDENTIDAD_URL:http://identidad:8083}
+    timeout-ms: ${IDENTIDAD_TIMEOUT_MS:2000}
+
+server:
+  port: ${PORT:8081}
+
+eureka:
+  client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: ${EUREKA_CLIENT_ENABLED:true}
+    fetch-registry: ${EUREKA_CLIENT_ENABLED:true}
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
