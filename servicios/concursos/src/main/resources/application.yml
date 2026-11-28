@@ -9,10 +9,11 @@ spring:
 
   flyway:
     out-of-order: true
+    # La base es compartida: su historial trae migraciones de otros servicios.
+    ignore-migration-patterns: "*:missing,*:future"
 
 siembra:
   activa: true
-  cuentas-carga: ${SIEMBRA_CUENTAS_CARGA:0}
 
 server:
   port: ${PORT:8082}

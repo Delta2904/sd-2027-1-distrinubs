@@ -43,9 +43,10 @@ import org.springframework.web.server.ResponseStatusException;
  *   <li>Aviso a organizadores si el retraso de envíos sin evaluar supera 5 minutos (300 s).</li>
  * </ul>
  *
- * <p>Dueño de datos: en la etapa 2 (paso 1) la tabla de posiciones aún no escribe
- * ninguna tabla, solo lee {@code envios}, {@code resultados}, {@code problemas},
- * {@code cuentas} y {@code concursos}.
+ * <p>Dueño de datos: la tabla de posiciones no escribe ninguna tabla, solo lee
+ * {@code envios}, {@code resultados}, {@code problemas}, {@code cuentas} y
+ * {@code concursos}. De {@code cuentas} lee el rol, que agrega la migración de
+ * {@code identidad}: solo las cuentas de alumno entran a la tabla.
  */
 @RestController
 @RequestMapping("/api/concursos")
@@ -132,9 +133,10 @@ public class TablaPosicionesController {
                         rs.getInt("puntos_base")),
                 concurso.id());
 
-        // 4. Cuentas registradas (todos los participantes)
+        // 4. Participantes: solo las cuentas de alumno. Las de organizador y de
+        //    administración no compiten y no aparecen en la tabla.
         List<CuentaInfo> cuentas = jdbc.query(
-                "SELECT id, usuario, nombre FROM cuentas ORDER BY id ASC",
+                "SELECT id, usuario, nombre FROM cuentas WHERE rol = 'ALUMNO' ORDER BY id ASC",
                 (rs, rowNum) -> new CuentaInfo(
                         rs.getLong("id"),
                         rs.getString("usuario"),

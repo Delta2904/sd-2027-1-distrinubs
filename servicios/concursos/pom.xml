@@ -14,7 +14,7 @@
     <artifactId>servicio-concursos</artifactId>
     <version>0.2.0</version>
     <name>servicio-concursos</name>
-    <description>Servicio de Concursos, Problemas, Tabla de Posiciones y Cuentas de Demo - Etapa 02-separacion</description>
+    <description>Servicio de Concursos, Problemas y Tabla de Posiciones - Etapa 02-separacion</description>
 
     <properties>
         <java.version>21</java.version>
