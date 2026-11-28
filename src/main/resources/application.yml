@@ -45,8 +45,17 @@ evaluacion:
 server:
   port: 8080
 
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{idCorrelacion:-}] %logger{36} - %msg%n"
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true

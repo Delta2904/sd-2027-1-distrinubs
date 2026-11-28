@@ -107,14 +107,14 @@ Después:
 ### Diego: el front, la demo de fallas y la observabilidad
 
 Primero:
-- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde.
-- [ ] Pantalla de inicio de sesión (paso 3), con el token en cada petición.
+- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde. *(Parcial: el front muestra un aviso claro en 502/503/504, timeout y falla de red, con el id de correlación de esa petición; falta comprobarlo entrando por el gateway).*
+- [ ] Pantalla de inicio de sesión (paso 3), con el token en cada petición. *(Parcial: pantalla y envío de `Authorization: Bearer` apuntando a `POST /api/auth/login` listos; pendiente el servicio `identidad` de Enrique).*
 
 Después:
-- [ ] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno.
-- [ ] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios.
-- [ ] Selector de lenguaje en el front (paso 8).
-- [ ] Opcional: editor de código al costado del enunciado, junto con el front en React.
+- [ ] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno. *(Parcial: script `scripts/demo_fallas.py` listo para los tres casos; el caso 1 solo pasa si el lease muestra la reentrega y los casos sin sus piezas se reportan como "no disponible". Falta comprobarlo de punta a punta con el Compose de la etapa 2).*
+- [ ] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios. *(Parcial: `FiltroCorrelacion`, Actuator y `/api/observabilidad/estado` listos en el monolito; la vista responde en 6 s aunque la base de datos o un servicio no contesten, y Actuator ya no muestra detalles sin autenticación. Los servicios sin URL de health configurada reportan `NO_DISPONIBLE` y el estado global queda `DEGRADADO`. Falta configurar esas URL y el id de correlación en los logs de cada servicio separado).*
+- [ ] Selector de lenguaje en el front (paso 8). *(Parcial: selector y plantillas en el front listos; solo Python 3 está habilitado y los demás aparecen como "próximamente", porque `envios` y `evaluacion` todavía solo aceptan `PYTHON3`).*
+- [ ] Opcional: editor de código al costado del enunciado, junto con el front en React. *(Parcial: editor al costado del enunciado agregado en el front HTML/JS; falta decidir si se migra a React).*
 
 ## Contratos que se fijan el primer día
 
