@@ -7,11 +7,6 @@ spring:
     username: ${DB_USER:distrinubs}
     password: ${DB_PASSWORD:distrinubs}
 
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
-
   flyway:
     out-of-order: true
 

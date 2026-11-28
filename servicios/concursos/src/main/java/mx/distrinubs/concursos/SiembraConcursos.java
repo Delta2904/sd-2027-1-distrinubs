@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * Siembra el concurso de demo, su problema y sus casos de prueba al arrancar
  * la aplicación, después de las migraciones y antes de que abra el puerto.
  *
- * <p>En 01 no hay interfaz de organizador: el concurso lo crea esta siembra.
+ * <p>En la etapa 2 todavía no hay interfaz de organizador: el concurso lo crea esta siembra.
  * Es idempotente: ids fijos y upsert por id. Dueño de datos: Concursos y
  * problemas es el único que escribe {@code concursos}, {@code problemas} y
  * {@code casos_prueba}.

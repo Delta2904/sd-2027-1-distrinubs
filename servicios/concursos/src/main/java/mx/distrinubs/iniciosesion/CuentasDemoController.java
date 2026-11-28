@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Lista las cuentas de demo para que el front elija al alumno.
  *
- * <p>En 01 no hay inicio de sesión: la identidad de demo no tiene contraseña ni
+ * <p>En la etapa 2 (paso 1) todavía no hay inicio de sesión: la identidad de demo no tiene contraseña ni
  * token (riesgo declarado en el README). Este controlador solo lee {@code cuentas};
  * las escribe la siembra al arrancar ({@link SiembraCuentasDemo}).
  */

@@ -22,3 +22,14 @@ API Gateway de Distrinubs para la etapa `02-separacion`.
 - `RUTA_ENVIOS_URI`: URI de reenvío para envíos (por omisión: `lb://envios`).
 - `RUTA_AUTH_URI`: URI de reenvío para autenticación (por omisión: `lb://identidad`).
 - `RUTA_MARCADOR_URI`: URI de reenvío para marcador (por omisión: `lb://marcador`).
+
+## Qué no hace este servicio y qué falta
+- **No contiene lógica de negocio ni acceso a base de datos**: únicamente enruta y balancea peticiones HTTP hacia los microservicios registrados en Eureka.
+- **No valida autenticación ni autorización**: la verificación de credenciales o tokens se delegará al servicio `identidad` (o a filtros de seguridad en etapas posteriores).
+- **Rutas pendientes de respaldo en esta etapa**: `/api/envios/**`, `/api/auth/**` y `/api/marcador/**` ya están declaradas en la configuración, pero sus servicios destino (`envios`, `identidad`, `marcador`) se irán separando e integrando conforme avance la etapa 2.
+
+## Cómo se prueba
+Ejecuta las pruebas del contexto y verificación de rutas configuradas en `RouteLocator`:
+```bash
+mvn test
+```
