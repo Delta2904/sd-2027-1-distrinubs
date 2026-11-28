@@ -232,6 +232,7 @@ Cada servicio trae su README (qué hace, qué no hace y qué falta), su Dockerfi
 - [docs/PRD.md](docs/PRD.md): problema, alcance, decisiones de arquitectura y bitácora de cambios de enfoque.
 - [docs/PLAN.md](docs/PLAN.md): las dos etapas, el reparto y las fechas.
 - [docs/arquitectura.md](docs/arquitectura.md): diagramas, flujo de un envío, dueños de datos y manejo de fallas.
+- [docs/demo.md](docs/demo.md): los comandos de la demo, en orden.
 - [docs/evidencia/](docs/evidencia/): salidas de la verificación del 28/11/2026.
 - [docs/pitch-distrinubs.pptx](docs/pitch-distrinubs.pptx): la presentación.
 - [CLAUDE.md](CLAUDE.md) y [AGENTS.md](AGENTS.md): reglas para los agentes que trabajan en el repositorio.
