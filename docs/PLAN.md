@@ -64,7 +64,7 @@ Primero (paso 1):
 - [x] nginx con `least_conn` delante de las réplicas del gateway y Eureka en su contenedor (`servicios/eureka`, paso 2). Comprobado el 28/11 con `scripts/demo_fallas.py`: con una réplica del gateway apagada la entrada atendió 8 de 8 peticiones, y una instancia muerta salió del directorio en 34 s.
 
 Después:
-- [ ] Circuit breaker y timeouts en las rutas del gateway (paso 6), con pull requests que revisa Joshua.
+- [x] Circuit breaker y timeouts en las rutas del gateway (paso 6). Un circuito por servicio destino con Resilience4j: ventana de 10 llamadas, abre con 50 % de fallas y dura abierto 10 s; tiempos de espera de 2 s para conectar y 7 s para responder. Medido en el Compose con `concursos` muerto: 2 s por petición hasta que abrió (8 peticiones entre las dos réplicas), 7 ms con el circuito abierto y 200 de nuevo a los 11 s de arrancar `concursos`. Las pruebas del gateway pasan (17). Falta la revisión de Joshua.
 - [ ] Publicar el resultado de cada envío para `marcador` (paso 5).
 - [ ] Cola de mensajes muertos y tope de reintentos, del lado del consumidor, junto con Enrique (paso 6).
 - [ ] Lenguajes (paso 8): compiladores en la imagen, paso de compilación con su propio tope, convenciones (en Java la clase se llama `Main`) y un código de ejemplo por lenguaje.
