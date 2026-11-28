@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: evaluacion
+
+  # En Docker Compose, las variables las pone docker-compose.yml.
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:distrinubs}
+    username: ${DB_USER:distrinubs}
+    password: ${DB_PASSWORD:distrinubs}
+
+  flyway:
+    # Cada servicio aplica las migraciones de sus tablas sobre la misma base.
+    # Una versión más vieja que llega después se aplica, y las migraciones de
+    # otros servicios que este no trae no lo detienen.
+    out-of-order: true
+    ignore-migration-patterns: "*:missing,*:future"
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+evaluacion:
+  activa: true
+  python: python3
+  # Consumidores por contenedor. Cada uno evalúa un envío a la vez.
+  workers: ${EVALUACION_WORKERS:2}
+  # Veces que se toma un envío antes de darlo por no evaluable (ERROR_SERVIDOR).
+  # Cuenta toda toma sin resultado; no penaliza al alumno.
+  max-tomas: 3
+  # Salvaguarda provisional: todavía no hay un tope de compilación definido.
+  salvaguarda-compilacion-ms: 10000
+  margen-lease-ms: 10000
+  # Barrido de respaldo que cierra con ERROR_SERVIDOR los envíos sin mensaje que agotaron sus tomas.
+  barrido-tope-ms: 30000
+  # La misma topología que declara envios: si difiere, RabbitMQ rechaza la declaración.
+  mensajeria:
+    exchange: distrinubs.envios
+    cola: envios.evaluacion
+    routing-key: envios.evaluacion
+    dlx: distrinubs.envios.dlx
+    dlq: envios.evaluacion.dlq
+    dlq-routing-key: envios.evaluacion.dlq
+    limite-entregas: ${ENVIOS_LIMITE_ENTREGAS:3}
+
+server:
+  port: ${EVALUACION_PUERTO:8085}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

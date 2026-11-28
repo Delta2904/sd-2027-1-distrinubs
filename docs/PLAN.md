@@ -56,9 +56,10 @@ Propuesta del 14/11 para confirmar en la reunión del 15/11. Cada quien es dueñ
 ### Emiliano: `evaluacion` e integración
 
 Primero (paso 1):
-- [ ] Pasar el worker y el ejecutor de Python a un servicio propio, con su Dockerfile.
-- [ ] Consumir de RabbitMQ, con confirmación solo al guardar el resultado, y varios workers con `--scale`.
-- [ ] Conservar el lease, el resultado único y el tope de 3 tomas con `ERROR_SERVIDOR`.
+- [x] Pasar el worker y el ejecutor de Python a un servicio propio, con su Dockerfile (`servicios/evaluacion`).
+- [x] Consumir de RabbitMQ, con confirmación solo al guardar el resultado, y varios workers con `--scale`. Manda el lease: el worker que recibe el mensaje de un worker caído espera a que venza su lease. Probado con RabbitMQ y PostgreSQL reales: al matar un worker a media evaluación, otro la retoma como toma 2 en unos 21 s y la evalúa una sola vez.
+- [x] Conservar el lease, el resultado único y el tope de 3 tomas con `ERROR_SERVIDOR`.
+- [ ] Probarlo de punta a punta con `envios` cuando entre su pull request.
 - [ ] Armar el `docker-compose.yml` de la etapa 2 (paso 2) y quedarse con él: los demás agregan su servicio con pull requests chicos.
 - [ ] nginx con `least_conn` delante de las réplicas del gateway y Eureka en su contenedor (paso 2). Cada dueño registra su servicio, y Joshua registra el gateway.
 
