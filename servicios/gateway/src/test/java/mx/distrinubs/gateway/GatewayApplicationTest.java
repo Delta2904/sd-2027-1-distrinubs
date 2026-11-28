@@ -8,6 +8,7 @@ import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.test.context.TestPropertySource;
+import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.util.Map;
@@ -57,7 +58,7 @@ class GatewayApplicationTest {
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get(pathPrueba).build());
-        Boolean coincide = ruta.getPredicate().apply(exchange).block();
+        Boolean coincide = Mono.from(ruta.getPredicate().apply(exchange)).block();
         assertTrue(Boolean.TRUE.equals(coincide), "La ruta " + id + " debería coincidir con " + pathPrueba);
     }
 }

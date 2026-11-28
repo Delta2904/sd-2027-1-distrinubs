@@ -25,13 +25,13 @@ Servicio desacoplado del juez en línea Distrinubs para la etapa `02-separacion`
 - `EUREKA_CLIENT_ENABLED`: Habilita registro en Eureka (por omisión: `true`).
 
 ## Qué no hace este servicio y qué falta
-- **No evalúa envíos ni ejecuta código**: la recepción y calificación de envíos corresponde al servicio `envios`.
-- **No gestiona autenticación ni sesiones**: aún no hay inicio de sesión ni tokens; las cuentas de demo se consultan sin contraseña.
+- **No evalúa envíos ni ejecuta código**: la recepción de envíos corresponde al servicio `envios` y su calificación al servicio `evaluacion`.
+- **No gestiona autenticación ni sesiones**: eso corresponde al servicio `identidad`. Mientras tanto, este servicio expone las cuentas de demo sin contraseña.
 - **No hay interfaz de organizador**: los concursos, problemas y casos de prueba se cargan únicamente mediante la siembra automática al arrancar (`SiembraConcursos`).
 - **Pendiente para etapas posteriores**:
   - Extraer el cálculo de la tabla de posiciones (`GET /api/concursos/activo/tabla`) hacia su propio servicio (`marcador`).
   - Extraer la gestión de cuentas y la siembra de cuentas de demo (`GET /api/cuentas-demo`, `SiembraCuentasDemo`) hacia el servicio `identidad`.
-  - Aplicar realmente los límites de memoria almacenados en la base de datos.
+  - El límite de memoria se guarda aquí, pero lo aplica `evaluacion` (pendiente en ese servicio).
 
 ## Cómo se prueba
 Ejecuta las pruebas unitarias e integración (usan PostgreSQL embebido con Zonky, no requieren levantar Docker manualmente):
