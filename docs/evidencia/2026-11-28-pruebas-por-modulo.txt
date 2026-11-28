@@ -1,0 +1,40 @@
+Pruebas por módulo, 2026-11-28
+Cada módulo: docker build --target construccion -t prueba-<módulo> . ; docker run --rm prueba-<módulo> mvn -B test (JDK 21)
+
+servicios/gateway: 17 pruebas, 0 fallas, 0 errores, 0 omitidas · BUILD SUCCESS
+    mx.distrinubs.gateway.GatewayApplicationTest: 1
+    mx.distrinubs.gateway.autenticacion.ClienteIdentidadReactivoTest: 3
+    mx.distrinubs.gateway.autenticacion.FiltroAutenticacionGatewayTest: 9
+    mx.distrinubs.gateway.circuito.CircuitoPorRutaTest: 4
+servicios/identidad: 18 pruebas, 0 fallas, 0 errores, 0 omitidas · BUILD SUCCESS
+    mx.distrinubs.identidad.IdentidadIntegracionTest: 14
+    mx.distrinubs.identidad.TokenJwtServiceTest: 4
+servicios/envios: 21 pruebas, 0 fallas, 0 errores, 0 omitidas · BUILD SUCCESS
+    mx.distrinubs.envios.ConfiguracionRabbitMQTest: 2
+    mx.distrinubs.envios.ClienteIdentidadHttpTest: 4
+    mx.distrinubs.envios.EnviosControllerTest: 11
+    mx.distrinubs.envios.BarridoRepublicacionEnviosTest: 4
+servicios/evaluacion: 17 pruebas, 0 fallas, 0 errores, 0 omitidas · BUILD SUCCESS
+    mx.distrinubs.evaluacion.WorkerEvaluacionTest: 8
+    mx.distrinubs.evaluacion.ConsumidorEnviosTest: 7
+    mx.distrinubs.evaluacion.EjecutorPythonTest: 2
+servicios/concursos: 8 pruebas, 0 fallas, 0 errores, 0 omitidas · BUILD SUCCESS
+    mx.distrinubs.tablaposiciones.TablaPosicionesControllerTest: 4
+    mx.distrinubs.tablaposiciones.TablaPosicionesSoloAlumnosTest: 1
+    mx.distrinubs.concursos.SiembraConcursosTest: 1
+    mx.distrinubs.concursos.ConcursosControllerTest: 2
+servicios/eureka: 4 pruebas, 0 fallas, 0 errores, 0 omitidas · BUILD SUCCESS
+    mx.distrinubs.directorio.DirectorioApplicationTest: 4
+aplicación de la etapa 1 (raíz): 31 pruebas, 0 fallas, 0 errores, 0 omitidas · BUILD SUCCESS
+    mx.distrinubs.tablaposiciones.TablaPosicionesControllerTest: 4
+    mx.distrinubs.concursos.SiembraConcursosTest: 1
+    mx.distrinubs.concursos.ConcursosControllerTest: 2
+    mx.distrinubs.evaluacion.VariosWorkersTest: 1
+    mx.distrinubs.evaluacion.EjecutorPythonTest: 2
+    mx.distrinubs.evaluacion.TopeReintentosTest: 3
+    mx.distrinubs.iniciosesion.SiembraCuentasDemoTest: 2
+    mx.distrinubs.envios.EnviosControllerTest: 8
+    mx.distrinubs.observabilidad.EstadoServiciosControllerTest: 4
+    mx.distrinubs.observabilidad.FiltroCorrelacionTest: 4
+
+Total: 116 pruebas

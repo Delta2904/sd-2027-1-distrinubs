@@ -1,0 +1,29 @@
+Circuit breaker del gateway con `concursos` muerto, 2026-11-28
+Se pide GET /api/concursos/activo por la entrada, se mata el contenedor de concursos con docker kill,
+se repite la petición 16 veces y se vuelve a arrancar. Cada línea: código HTTP, tiempo total y cuerpo.
+
+== Antes: concursos arriba
+200 0.088705s {"id":1,"nombre":"Distrinubs Round 1","inicio":"2026-11-28T09:08:47.512520Z","fin":"2026-11-29T10:08:47.512520Z","estado":"ABIERTO","problemas":[{"id":1,"letra"
+== docker kill concursos (10:19:12)
+peticion 1: 503 2.108279s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 2: 503 2.019090s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 3: 503 2.010863s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 4: 503 2.010995s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 5: 503 2.012510s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 6: 503 2.011329s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 7: 503 2.012699s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 8: 503 2.016491s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 9: 503 0.007200s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 10: 503 0.006903s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 11: 503 0.006530s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 12: 503 0.007033s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 13: 503 0.007260s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 14: 503 0.006662s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 15: 503 0.006668s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+peticion 16: 503 0.006785s {"status":503,"error":"SERVICIO_NO_DISPONIBLE","servicio":"concursos","mensaje":"El servicio concursos no está disponible. Intenta de nuevo en unos segundos."}
+== docker compose start concursos (10:19:30)
+200 de nuevo a los 11 s de arrancar concursos
+despues 1: 200 0.011800s {"id":1,"nombre":"Distrinubs Round 1","inicio":"2026-11-28T09:08:47.512520Z","fin":"2026-11-29T10:08:47.512520Z","estado":"ABIERTO","problemas":[{"id":1,"letra"
+despues 2: 200 0.010223s {"id":1,"nombre":"Distrinubs Round 1","inicio":"2026-11-28T09:08:47.512520Z","fin":"2026-11-29T10:08:47.512520Z","estado":"ABIERTO","problemas":[{"id":1,"letra"
+despues 3: 200 0.011047s {"id":1,"nombre":"Distrinubs Round 1","inicio":"2026-11-28T09:08:47.512520Z","fin":"2026-11-29T10:08:47.512520Z","estado":"ABIERTO","problemas":[{"id":1,"letra"
+despues 4: 200 0.010761s {"id":1,"nombre":"Distrinubs Round 1","inicio":"2026-11-28T09:08:47.512520Z","fin":"2026-11-29T10:08:47.512520Z","estado":"ABIERTO","problemas":[{"id":1,"letra"

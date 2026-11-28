@@ -1,0 +1,66 @@
+$ python scripts/demo.py --contrasena <SIEMBRA_CONTRASENA_DEMO>
+
+
+[1] Concurso abierto con sus problemas
+    OK  Distrinubs Round 1: problema A · Suma simple
+
+[2] Cuentas de demo
+    OK  5 cuentas; se usará alumno1 (id 1)
+    OK  sesión iniciada como alumno1
+
+[3] Subir envío incorrecto y reintentar con el mismo intentoId
+    OK  recibido, envío 1
+    OK  el reintento con el mismo intentoId devolvió el mismo envío
+
+[4] Evaluación y veredicto del envío incorrecto
+    OK  Wrong Answer
+
+[5] Subir envío correcto y ver su veredicto
+    OK  envío 3: Accepted
+
+[6] Tabla provisional
+    OK  la tabla tiene 5 fila(s) y alumno1 aparece en ella
+[
+  {
+    "posicion": 1,
+    "usuario": "alumno1",
+    "nombre": "Alumno Uno",
+    "resueltos": 1,
+    "penalizacion": 65,
+    "A": "✔ (+1, 60m)"
+  },
+  {
+    "posicion": 2,
+    "usuario": "alumno2",
+    "nombre": "Alumno Dos",
+    "resueltos": 0,
+    "penalizacion": 0,
+    "A": "-"
+  },
+  {
+    "posicion": 2,
+    "usuario": "alumno3",
+    "nombre": "Alumno Tres",
+    "resueltos": 0,
+    "penalizacion": 0,
+    "A": "-"
+  },
+  {
+    "posicion": 2,
+    "usuario": "alumno4",
+    "nombre": "Alumno Cuatro",
+    "resueltos": 0,
+    "penalizacion": 0,
+    "A": "-"
+  },
+  {
+    "posicion": 2,
+    "usuario": "alumno5",
+    "nombre": "Alumno Cinco",
+    "resueltos": 0,
+    "penalizacion": 0,
+    "A": "-"
+  }
+]
+
+Demostración completa: puntos 1 a 6 recorridos.
