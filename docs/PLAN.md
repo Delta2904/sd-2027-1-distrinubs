@@ -26,6 +26,14 @@ Pasa a la etapa 2: autenticación, más lenguajes, sandbox, límite de memoria, 
 
 ## Etapa 2: separar todo
 
+**Cierre del 28/11.** Verificado desde cero (`docker compose down -v`, `docker compose up -d --build`), con las salidas en [evidencia/](evidencia/):
+
+- Los 12 contenedores quedan sanos en 28 s con las imágenes ya construidas, y `scripts/demo.py` pasa completo.
+- `scripts/demo_fallas.py --todos` pasó los tres casos en tres corridas seguidas: del kill del worker al veredicto pasaron de 24 a 25 s, la entrada atendió 8 de 8 peticiones con una réplica del gateway apagada y la instancia muerta salió de Eureka en 30 a 34 s. El caso 2, corrido aparte, pasó 10 de 10 veces.
+- Pasan las 116 pruebas de los siete módulos: gateway 17, identidad 18, envios 21, evaluacion 17, concursos 8, eureka 4 y la aplicación de la etapa 1 31.
+- Entraron los pasos 1, 2, 3 y 4, el circuit breaker y los timeouts del paso 6, y la vista de estado del paso 7.
+- Quedan fuera de esta entrega: `marcador` con Redis (paso 5), los lenguajes (paso 8), el paso 9, el consumidor de la cola de mensajes muertos, el id de correlación en los logs de los servicios separados y la prueba de carga contra los servicios. Están en "qué queda pendiente" del README.
+
 Pasos en orden. Cada uno deja el sistema funcionando y se comprueba con `scripts/demo.py`. Los pasos 1, 2 y 3 se trabajan en paralelo, cada quien en su parte. **El 24/11 lo que no corre de punta a punta se declara fuera** en el README y el reporte.
 
 | Paso | Qué | Quién |
@@ -57,19 +65,19 @@ Propuesta del 14/11 para confirmar en la reunión del 15/11. Cada quien es dueñ
 
 Primero (paso 1):
 - [x] Pasar el worker y el ejecutor de Python a un servicio propio, con su Dockerfile (`servicios/evaluacion`).
-- [x] Consumir de RabbitMQ, con confirmación solo al guardar el resultado, y varios workers con `--scale`. Manda el lease: el worker que recibe el mensaje de un worker caído espera a que venza su lease. Probado con RabbitMQ y PostgreSQL reales: al matar un worker a media evaluación, otro la retoma como toma 2 en unos 21 s y la evalúa una sola vez.
+- [x] Consumir de RabbitMQ, con confirmación solo al guardar el resultado, y varios workers con `--scale`. Manda el lease: el worker que recibe el mensaje de un worker caído espera a que venza su lease. Probado con RabbitMQ y PostgreSQL reales: al matar un worker a media evaluación, otro la retoma como toma 2 en unos 21 s y la evalúa una sola vez. En el cierre del 28/11, con el Compose completo, pasaron de 24 a 25 s del kill al veredicto.
 - [x] Conservar el lease, el resultado único y el tope de 3 tomas con `ERROR_SERVIDOR`.
 - [x] Probarlo de punta a punta con `envios`. Comprobado el 28/11 con el Compose de la etapa 2: `scripts/demo.py` pasa completo y, en el caso 1 de `scripts/demo_fallas.py`, al matar el contenedor del worker otro retoma el envío como toma 2 y lo deja en `ACCEPTED`.
 - [x] Armar el `docker-compose.yml` de la etapa 2 (paso 2) y quedarse con él: levanta nginx, el gateway en 2 réplicas, Eureka, `identidad`, `concursos`, `envios`, `evaluacion` en 2 contenedores, RabbitMQ y PostgreSQL. Las variables obligatorias van en un `.env`, con `.env.ejemplo` de plantilla.
-- [x] nginx con `least_conn` delante de las réplicas del gateway y Eureka en su contenedor (`servicios/eureka`, paso 2). Comprobado el 28/11 con `scripts/demo_fallas.py`: con una réplica del gateway apagada la entrada atendió 8 de 8 peticiones, y una instancia muerta salió del directorio en 34 s.
+- [x] nginx con `least_conn` delante de las réplicas del gateway y Eureka en su contenedor (`servicios/eureka`, paso 2). Comprobado el 28/11 con `scripts/demo_fallas.py`: con una réplica del gateway apagada la entrada atendió 8 de 8 peticiones, y una instancia muerta salió del directorio en 30 a 34 s. El caso de la réplica apagada fallaba a veces (2 de 9) mientras nginx volvía a consultar el DNS; sin esa consulta pasó 10 de 10 corridas.
 
 Después:
 - [x] Circuit breaker y timeouts en las rutas del gateway (paso 6). Un circuito por servicio destino con Resilience4j: ventana de 10 llamadas, abre con 50 % de fallas y dura abierto 10 s; tiempos de espera de 2 s para conectar y 7 s para responder. Medido en el Compose con `concursos` muerto: 2 s por petición hasta que abrió (8 peticiones entre las dos réplicas), 7 ms con el circuito abierto y 200 de nuevo a los 11 s de arrancar `concursos`. Las pruebas del gateway pasan (17). Falta la revisión de Joshua.
-- [ ] Publicar el resultado de cada envío para `marcador` (paso 5).
-- [ ] Cola de mensajes muertos y tope de reintentos, del lado del consumidor, junto con Enrique (paso 6).
-- [ ] Lenguajes (paso 8): compiladores en la imagen, paso de compilación con su propio tope, convenciones (en Java la clase se llama `Main`) y un código de ejemplo por lenguaje.
-- [ ] Verificar y documentar dos riesgos: que el código del alumno lea `/proc/<pid>/environ` del proceso Java, y que un `#include` filtre archivos del servidor en el mensaje de compilación.
-- [ ] Si alcanza (paso 9): sandbox por envío, límite de memoria y evaluación final.
+- [ ] Publicar el resultado de cada envío para `marcador` (paso 5). *(Fuera de esta entrega: `marcador` no se implementó).*
+- [ ] Cola de mensajes muertos y tope de reintentos, del lado del consumidor, junto con Enrique (paso 6). *(Parcial: el consumidor rechaza el mensaje que no trae `envioId`, que va a `envios.evaluacion.dlq`, y el tope de 3 tomas cierra el envío con `ERROR_SERVIDOR`; está cubierto con las pruebas de `evaluacion`. Comprobado el 28/11 con el Compose: un mensaje sin `envioId` publicado a mano terminó en `envios.evaluacion.dlq`. Falta un consumidor que lea esa cola y la muestre a los organizadores).*
+- [ ] Lenguajes (paso 8): compiladores en la imagen, paso de compilación con su propio tope, convenciones (en Java la clase se llama `Main`) y un código de ejemplo por lenguaje. *(Fuera de esta entrega por decisión del equipo el 28/11).*
+- [ ] Verificar y documentar dos riesgos: que el código del alumno lea `/proc/<pid>/environ` del proceso Java, y que un `#include` filtre archivos del servidor en el mensaje de compilación. *(Sin hacer: quedan como pendientes en el README).*
+- [ ] Si alcanza (paso 9): sandbox por envío, límite de memoria y evaluación final. *(No alcanzó: fuera de esta entrega).*
 - [ ] Integración: README de `main`, consolidar el reporte.
 
 ### Enrique: `envios`, mensajería e `identidad`
@@ -84,17 +92,17 @@ Autenticación (paso 3):
 - [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`), rechazar `alumnoId` ajeno para cualquier rol y dejar que cada usuario consulte según su dueño o supervisión. Con eso termina la suplantación por `alumnoId`.
 - [x] Filtro que valida el token, ya integrado en `servicios/gateway/`: las rutas públicas son una lista exacta, rechaza las rutas sin normalizar, aísla los errores de `identidad` respecto a los backends aguas abajo y propaga `X-Usuario-Id`, `X-Usuario-Login` y `X-Usuario-Rol`. El gateway ya manda `/api/cuentas-demo` a `identidad`, que lista solo las cuentas de alumno no bloqueadas. Está cubierto con las pruebas de cada servicio.
 - [x] Probar la autenticación de punta a punta con el Compose (front, gateway, `identidad` y `envios`). Comprobado el 28/11: el front inicia sesión, manda el token, sube un envío por el gateway y muestra el veredicto; sin token, `envios` y las rutas de administración responden 401.
-- [ ] Acordar con Diego los claims del token y el orden de integración con su pantalla de inicio de sesión y `scripts/demo.py` (ya acepta `--contrasena`).
+- [x] Acordar con Diego los claims del token y el orden de integración con su pantalla de inicio de sesión y `scripts/demo.py` (ya acepta `--contrasena`). El equipo confirmó el 28/11 la validación del token en el gateway y en `envios`, con falla cerrada; el front y `scripts/demo.py` ya inician sesión con ese token.
 
 Después:
-- [ ] Cola de mensajes muertos (`envios.evaluacion.dlq`) con tope de entregas (cola quorum, `x-delivery-limit` 3): lado del productor listo en `servicios/envios/`; falta el consumidor de Emiliano y probarlo de punta a punta (paso 6).
-- [ ] Acordar con Emiliano quién aplica las migraciones en Compose. *(En el Compose de la etapa 2 cada servicio aplica las suyas al arrancar y no hay un contenedor aparte que migre. Arranca bien desde una base vacía; falta que el equipo lo confirme como decisión).*
-- [ ] Redis para sesiones y revocación, si hace falta.
+- [ ] Cola de mensajes muertos (`envios.evaluacion.dlq`) con tope de entregas (cola quorum, `x-delivery-limit` 3): lado del productor listo en `servicios/envios/`. *(Comprobado el 28/11 con el Compose: un mensaje que `evaluacion` rechaza termina en esa cola. Falta un consumidor que la lea).*
+- [x] Acordar con Emiliano quién aplica las migraciones en Compose. Confirmado por el equipo el 28/11: cada servicio aplica las suyas al arrancar y no hay un contenedor aparte que migre. Arranca bien desde una base vacía.
+- [ ] Redis para sesiones y revocación, si hace falta. *(No hizo falta en esta entrega).*
 
 ### Joshua: `concursos`, `gateway` y `marcador`
 
 Primero (paso 1):
-- [x] `concursos` como servicio, con su siembra y las rutas actuales. En este paso conserva la tabla de posiciones y las cuentas de demo.
+- [x] `concursos` como servicio, con su siembra y las rutas actuales. Conserva la tabla de posiciones, que desde el 28/11 lista solo a los alumnos. Las cuentas de demo ya no son suyas: las siembra y las lista `identidad`.
 
 Entrada (paso 2, puede empezar ya contra el monolito):
 - [x] Probar el primer día qué versión de Spring Cloud funciona con Spring Boot 3.3.13.
@@ -102,21 +110,21 @@ Entrada (paso 2, puede empezar ya contra el monolito):
 - [x] Registrar el gateway en Eureka y dejar listas las rutas para que nginx y el circuit breaker de Emiliano se conecten.
 
 Después:
-- [ ] `marcador` aparte (paso 5): consume los resultados, guarda su propio modelo y calcula la tabla.
-- [ ] Redis delante del marcador: TTL menor que el atraso tolerado de 5 minutos, invalidación al llegar un resultado y protección contra una expiración masiva.
-- [ ] Repetir la prueba de carga (`scripts/carga.py`) contra los servicios y comparar con la del monolito.
+- [ ] `marcador` aparte (paso 5): consume los resultados, guarda su propio modelo y calcula la tabla. *(Fuera de esta entrega por decisión del equipo el 28/11: la tabla la calcula `concursos`).*
+- [ ] Redis delante del marcador: TTL menor que el atraso tolerado de 5 minutos, invalidación al llegar un resultado y protección contra una expiración masiva. *(Fuera de esta entrega, junto con `marcador`).*
+- [ ] Repetir la prueba de carga (`scripts/carga.py`) contra los servicios y comparar con la del monolito. *(Sin hacer: el script todavía no inicia sesión. El número que hay es el de la etapa 1).*
 - [ ] Si alcanza (paso 9): dificultad por resueltos, desempate completo, interfaz de organizador y saga de cierre del concurso.
 
 ### Diego: el front, la demo de fallas y la observabilidad
 
 Primero:
-- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde. *(Parcial: el front muestra un aviso claro en 502/503/504, timeout y falla de red, con el id de correlación de esa petición; comprobado el 28/11 con el Compose de la etapa 2 que, entrando por nginx y el gateway, el front carga, inicia sesión, sube un envío y muestra el veredicto y la tabla. Falta comprobar el aviso de error con un servicio caído).*
+- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde. *(Parcial: el front muestra un aviso claro en 502/503/504, timeout y falla de red, con el id de correlación de esa petición; comprobado el 28/11 con el Compose de la etapa 2 que, entrando por nginx y el gateway, el front carga, inicia sesión, sube un envío y muestra el veredicto y la tabla. Con un servicio caído, el gateway ya responde el 503 del circuit breaker con el nombre del servicio. Falta comprobar en el navegador el aviso del front con un servicio caído).*
 - [x] Pantalla de inicio de sesión (paso 3), con el token en cada petición. Comprobado el 28/11 con el Compose de la etapa 2: la pantalla inicia sesión contra `identidad` y manda `Authorization: Bearer` en cada petición.
 
 Después:
 - [x] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno. El caso 1 solo pasa si el lease muestra la reentrega y los casos sin sus piezas se reportan como "no disponible". Comprobado el 28/11 con el Compose de la etapa 2: los tres casos pasan.
 - [ ] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios. *(Parcial: `FiltroCorrelacion`, Actuator y `/api/observabilidad/estado` listos en el monolito; la vista responde en 6 s aunque la base de datos o un servicio no contesten, y Actuator ya no muestra detalles sin autenticación. Los servicios sin URL de health configurada reportan `NO_DISPONIBLE` y el estado global queda `DEGRADADO`. El Compose de la etapa 2 ya configura esas URL y la vista muestra cada servicio; `marcador` sale `NO_DISPONIBLE` porque todavía no existe. Falta el id de correlación en los logs de cada servicio separado).*
-- [ ] Selector de lenguaje en el front (paso 8). *(Parcial: selector y plantillas en el front listos; solo Python 3 está habilitado y los demás aparecen como "próximamente", porque `envios` y `evaluacion` todavía solo aceptan `PYTHON3`).*
+- [ ] Selector de lenguaje en el front (paso 8). *(Parcial: selector y plantillas en el front listos; solo Python 3 está habilitado y los demás aparecen como "próximamente", porque `envios` y `evaluacion` todavía solo aceptan `PYTHON3`. Los demás lenguajes quedaron fuera de esta entrega).*
 - [ ] Opcional: editor de código al costado del enunciado, junto con el front en React. *(Parcial: editor al costado del enunciado agregado en el front HTML/JS; falta decidir si se migra a React).*
 
 ## Contratos que se fijan el primer día
@@ -125,12 +133,12 @@ Son los puntos donde el trabajo de uno depende del de otro. Se acuerdan el 15/11
 
 | Contrato | Entre quién | Propuesta |
 |---|---|---|
-| Mensaje del envío a evaluar | Enrique y Emiliano | Una cola de RabbitMQ; el cuerpo lleva el `envioId`. El estado sigue en PostgreSQL; cola quorum con `x-delivery-limit` 3 y DLX hacia `envios.evaluacion.dlq` (propuesta, por confirmar con Emiliano) |
-| Mensaje del resultado | Emiliano y Joshua | `envioId`, `cuentaId`, `problemaId`, `veredicto` y `llegadaEn` |
-| Token | Enrique, Joshua y Diego | Propuesta de Enrique, por confirmar con Joshua y Diego: JWT HS256 en `Authorization: Bearer`, emitido por `POST /api/auth/login`, con `sub` (id de la cuenta, como texto), `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs` y `exp`. Se valida en el gateway y en `envios`, consultando `GET /api/auth/validar` en `identidad`. Secreto `JWT_SECRETO`, sin valor por omisión |
+| Mensaje del envío a evaluar | Enrique y Emiliano | Una cola de RabbitMQ; el cuerpo lleva el `envioId`. El estado sigue en PostgreSQL; cola quorum con `x-delivery-limit` 3 y DLX hacia `envios.evaluacion.dlq`. En uso por los dos lados |
+| Mensaje del resultado | Emiliano y Joshua | `envioId`, `cuentaId`, `problemaId`, `veredicto` y `llegadaEn`. Sin implementar: `marcador` quedó fuera de esta entrega |
+| Token | Enrique, Joshua y Diego | Confirmado por el equipo el 28/11: JWT HS256 en `Authorization: Bearer`, emitido por `POST /api/auth/login`, con `sub` (id de la cuenta, como texto), `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs` y `exp`. Se valida en el gateway y en `envios`, consultando `GET /api/auth/validar` en `identidad`. Secreto `JWT_SECRETO`, sin valor por omisión |
 | Rutas públicas | Joshua y todos | No cambian: `/api/envios/**`, `/api/concursos/**` y `/api/cuentas-demo`. Así el front y el demo siguen igual |
-| Datos entre servicios | Los cuatro | Propuesta de Enrique (bitácora 25), por confirmar con los cuatro: una instancia y esquema `public`, un solo escritor por tabla; cada servicio aplica las mismas migraciones con Flyway. Falta decidir en Compose quién migra |
-| Quién valida la lista de lenguajes | Emiliano y Enrique | Antes del paso 8 |
+| Datos entre servicios | Los cuatro | Confirmado por los cuatro el 28/11: una instancia y esquema `public`, un solo escritor por tabla; cada servicio aplica sus migraciones con Flyway al arrancar y no hay un contenedor aparte que migre |
+| Quién valida la lista de lenguajes | Emiliano y Enrique | Antes del paso 8, que quedó fuera de esta entrega |
 
 ## Cómo trabajamos
 
