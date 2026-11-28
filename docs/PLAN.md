@@ -92,12 +92,12 @@ Después:
 ### Joshua: `concursos`, `gateway` y `marcador`
 
 Primero (paso 1):
-- [ ] `concursos` como servicio, con su siembra y las rutas actuales. En este paso conserva la tabla de posiciones y las cuentas de demo.
+- [x] `concursos` como servicio, con su siembra y las rutas actuales. En este paso conserva la tabla de posiciones y las cuentas de demo.
 
 Entrada (paso 2, puede empezar ya contra el monolito):
-- [ ] Probar el primer día qué versión de Spring Cloud funciona con Spring Boot 3.3.13.
-- [ ] Gateway en 2 réplicas, con rutas por prefijo y sin lógica de negocio.
-- [ ] Registrar el gateway en Eureka y dejar listas las rutas para que nginx y el circuit breaker de Emiliano se conecten.
+- [x] Probar el primer día qué versión de Spring Cloud funciona con Spring Boot 3.3.13.
+- [x] Gateway en 2 réplicas, con rutas por prefijo y sin lógica de negocio.
+- [x] Registrar el gateway en Eureka y dejar listas las rutas para que nginx y el circuit breaker de Emiliano se conecten.
 
 Después:
 - [ ] `marcador` aparte (paso 5): consume los resultados, guarda su propio modelo y calcula la tabla.
@@ -127,7 +127,7 @@ Son los puntos donde el trabajo de uno depende del de otro. Se acuerdan el 15/11
 | Mensaje del resultado | Emiliano y Joshua | `envioId`, `cuentaId`, `problemaId`, `veredicto` y `llegadaEn` |
 | Token | Enrique, Joshua y Diego | Propuesta de Enrique, por confirmar con Joshua y Diego: JWT HS256 en `Authorization: Bearer`, emitido por `POST /api/auth/login`, con `sub` (id de la cuenta, como texto), `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs` y `exp`. Se valida en el gateway y en `envios`, consultando `GET /api/auth/validar` en `identidad`. Secreto `JWT_SECRETO`, sin valor por omisión |
 | Rutas públicas | Joshua y todos | No cambian: `/api/envios/**`, `/api/concursos/**` y `/api/cuentas-demo`. Así el front y el demo siguen igual |
-| Datos entre servicios | Los cuatro | Propuesta de Enrique (bitácora 22), por confirmar con los cuatro: una instancia y esquema `public`, un solo escritor por tabla; cada servicio aplica las mismas migraciones con Flyway. Falta decidir en Compose quién migra |
+| Datos entre servicios | Los cuatro | Propuesta de Enrique (bitácora 23), por confirmar con los cuatro: una instancia y esquema `public`, un solo escritor por tabla; cada servicio aplica las mismas migraciones con Flyway. Falta decidir en Compose quién migra |
 | Quién valida la lista de lenguajes | Emiliano y Enrique | Antes del paso 8 |
 
 ## Cómo trabajamos
