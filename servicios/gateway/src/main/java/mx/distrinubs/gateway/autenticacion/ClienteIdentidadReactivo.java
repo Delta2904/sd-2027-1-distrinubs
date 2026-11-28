@@ -16,8 +16,9 @@ import reactor.core.publisher.Mono;
 
 /**
  * Cliente reactivo hacia {@code identidad} con política de falla cerrada:
- * si {@code identidad} no responde, vence el timeout o devuelve 5xx, falla con
- * {@code 503 Service Unavailable}.
+ * solo un 401 o un 403 de {@code identidad} hablan del token o de la cuenta. Si
+ * {@code identidad} no responde, vence el timeout o devuelve cualquier otro código,
+ * falla con {@code 503 Service Unavailable}.
  */
 @Component
 public class ClienteIdentidadReactivo implements VerificadorRemotoIdentidad {
@@ -57,12 +58,18 @@ public class ClienteIdentidadReactivo implements VerificadorRemotoIdentidad {
             return rse;
         }
         if (error instanceof WebClientResponseException wcre) {
-            if (wcre.getStatusCode() == HttpStatus.FORBIDDEN) {
+            int codigo = wcre.getStatusCode().value();
+            if (codigo == HttpStatus.FORBIDDEN.value()) {
                 return new ResponseStatusException(HttpStatus.FORBIDDEN, "Cuenta sin permiso o bloqueada");
             }
-            if (wcre.getStatusCode().is4xxClientError()) {
+            if (codigo == HttpStatus.UNAUTHORIZED.value()) {
                 return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token inválido o revocado");
             }
+            // Un 404, 405 o 429 no dice nada del token: es identidad mal configurada o saturada.
+            log.warn("Falla cerrada en gateway: identidad respondió HTTP {} al validar el token", codigo);
+            return new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Servicio de identidad no disponible");
         }
         log.warn("Falla cerrada en gateway al validar token contra identidad: {}", error.getMessage());
         return new ResponseStatusException(

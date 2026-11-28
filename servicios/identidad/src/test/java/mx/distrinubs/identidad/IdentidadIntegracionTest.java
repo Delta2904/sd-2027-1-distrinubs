@@ -21,11 +21,13 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +41,7 @@ class IdentidadIntegracionTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private JdbcTemplate jdbc;
     private SiembraCuentasIdentidad siembra;
+    private IdentidadService identidadService;
     private MockMvc mockMvc;
 
     private static synchronized JdbcTemplate obtenerJdbc() {
@@ -67,7 +70,7 @@ class IdentidadIntegracionTest {
 
         TokenJwtService tokenService = new TokenJwtService(
                 mapper, "secreto-integracion-identidad-distrinubs", 3600);
-        IdentidadService identidadService = new IdentidadService(jdbc, tokenService);
+        identidadService = new IdentidadService(jdbc, tokenService);
         siembra = new SiembraCuentasIdentidad(jdbc, 0, "distrinubs", "claveAdminSegura!");
         siembra.afterPropertiesSet();
 
@@ -406,5 +409,45 @@ class IdentidadIntegracionTest {
 
         String rolActual = jdbc.queryForObject("SELECT rol FROM cuentas WHERE id = 2", String.class);
         assertEquals("ORGANIZADOR", rolActual);
+    }
+
+    @Test
+    @DisplayName("Crear una cuenta con usuario o nombre demasiado largo responde 400, no 409")
+    void crearCuentaConDatosDemasiadoLargosResponde400() throws Exception {
+        String tokenAdmin = iniciarSesion("admin", "claveAdminSegura!");
+
+        // La petición se rechaza al validarla, antes de llegar a la base.
+        mockMvc.perform(post("/api/identidad/cuentas")
+                        .header("Authorization", "Bearer " + tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"usuario": "%s", "nombre": "Nombre", "contrasena": "claveSegura123"}
+                                """.formatted("u".repeat(51))))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/identidad/cuentas")
+                        .header("Authorization", "Bearer " + tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"usuario": "usuario_corto", "nombre": "%s", "contrasena": "claveSegura123"}
+                                """.formatted("n".repeat(121))))
+                .andExpect(status().isBadRequest());
+
+        // Si la validación no la detiene, la base la rechaza y tampoco es un 409.
+        ResponseStatusException porLongitud = assertThrows(
+                ResponseStatusException.class,
+                () -> identidadService.crearCuenta(
+                        new CrearCuentaRequest("u".repeat(51), "Nombre", "claveSegura123", "ALUMNO")));
+        assertEquals(HttpStatus.BAD_REQUEST, porLongitud.getStatusCode());
+
+        // El usuario repetido sigue siendo el único caso de 409.
+        ResponseStatusException porRepetido = assertThrows(
+                ResponseStatusException.class,
+                () -> identidadService.crearCuenta(
+                        new CrearCuentaRequest("Alumno1", "Otro", "claveSegura123", "ALUMNO")));
+        assertEquals(HttpStatus.CONFLICT, porRepetido.getStatusCode());
+
+        Integer totalCuentas = jdbc.queryForObject("SELECT COUNT(*) FROM cuentas", Integer.class);
+        assertEquals(7, totalCuentas);
     }
 }

@@ -152,12 +152,14 @@ class BarridoRepublicacionEnviosTest {
     }
 
     @Test
-    @DisplayName("Si RabbitMQ rechaza la publicación, libera publicado_en y corta el lote")
+    @DisplayName("Si RabbitMQ rechaza la publicación, corta el lote y devuelve publicado_en a su valor anterior")
     void liberaReclamoSiBrokerFalla() {
         when(publicadorEnvios.publicar(anyLong())).thenReturn(false);
 
         long primero = insertarEnvio(30, null, 0);
         long segundo = insertarEnvio(500, 400, 1);
+        Timestamp publicadoAntes = jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, segundo);
 
         int publicados = barrido.republicarPendientes();
 
@@ -165,12 +167,49 @@ class BarridoRepublicacionEnviosTest {
         verify(publicadorEnvios, times(1)).publicar(anyLong());
         assertNull(jdbc.queryForObject(
                 "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, primero));
-        assertNull(jdbc.queryForObject(
+        assertEquals(publicadoAntes, jdbc.queryForObject(
                 "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, segundo));
         assertEquals(0, jdbc.queryForObject(
                 "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, primero));
         assertEquals(1, jdbc.queryForObject(
                 "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, segundo));
+    }
+
+    @Test
+    @DisplayName("Si un envío lanza una excepción, se libera su reclamo y los demás del lote se publican")
+    void excepcionEnUnEnvioNoDejaReclamadosALosDemas() {
+        long nuncaPublicado = insertarEnvio(30, null, 0);
+        long yaPublicado = insertarEnvio(500, 400, 1);
+        long tercero = insertarEnvio(40, null, 0);
+        Timestamp publicadoAntes = jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, yaPublicado);
+
+        when(publicadorEnvios.publicar(nuncaPublicado)).thenThrow(new IllegalStateException("falla al publicar"));
+        when(publicadorEnvios.publicar(yaPublicado)).thenThrow(new IllegalStateException("falla al publicar"));
+
+        int publicados = barrido.republicarPendientes();
+
+        // El tercero se publica aunque los dos primeros hayan fallado.
+        assertEquals(1, publicados);
+        verify(publicadorEnvios).publicar(tercero);
+        assertNotNull(jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, tercero));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, tercero));
+
+        // Los que fallaron no se quedan reclamados: vuelven a como estaban.
+        assertNull(jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, nuncaPublicado));
+        assertEquals(publicadoAntes, jdbc.queryForObject(
+                "SELECT publicado_en FROM envios WHERE id = ?", Timestamp.class, yaPublicado));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, nuncaPublicado));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, yaPublicado));
+
+        // Por eso el siguiente barrido los vuelve a tomar sin esperar la espera máxima en cola.
+        when(publicadorEnvios.publicar(anyLong())).thenReturn(true);
+        assertEquals(2, barrido.republicarPendientes());
     }
 
     @Test

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -195,5 +197,79 @@ class FiltroAutenticacionGatewayTest {
                 .verify();
 
         assertNull(exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Una ruta con .. o // no pasa como pública aunque empiece igual que una: responde 400")
+    void rutaSinNormalizarNoPasaSinToken() {
+        for (String ruta : new String[] {
+                "/actuator/health/../api/envios",
+                "/actuator/health/%2e%2e/api/envios",
+                "/api/observabilidad/estado/../../envios/10",
+                "/actuator//health"}) {
+            // Con URI.create la ruta llega tal cual, sin que la prueba vuelva a codificar el %.
+            MockServerWebExchange exchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.method(HttpMethod.GET, URI.create("http://localhost" + ruta)).build());
+
+            GatewayFilterChain chain = mock(GatewayFilterChain.class);
+            StepVerifier.create(filtro.filter(exchange, chain)).verifyComplete();
+
+            assertEquals(HttpStatus.BAD_REQUEST, exchange.getResponse().getStatusCode(), ruta);
+            verify(chain, never()).filter(any());
+        }
+        verify(verificadorRemoto, never()).validarRemoto(anyString());
+    }
+
+    @Test
+    @DisplayName("Solo la lista exacta es pública: otra ruta bajo el mismo prefijo responde 401 sin token")
+    void rutaBajoPrefijoPublicoExigeToken() {
+        for (String ruta : new String[] {
+                "/api/observabilidad/otra",
+                "/api/observabilidad/",
+                "/actuator/health/db",
+                "/actuator/env"}) {
+            MockServerWebExchange exchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.get(ruta).build());
+
+            GatewayFilterChain chain = mock(GatewayFilterChain.class);
+            StepVerifier.create(filtro.filter(exchange, chain)).verifyComplete();
+
+            assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode(), ruta);
+            verify(chain, never()).filter(any());
+        }
+
+        // La misma ruta pública con otro método tampoco pasa.
+        MockServerWebExchange conPost = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/observabilidad/estado").build());
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        StepVerifier.create(filtro.filter(conPost, chain)).verifyComplete();
+
+        assertEquals(HttpStatus.UNAUTHORIZED, conPost.getResponse().getStatusCode());
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    @DisplayName("El estado de los servicios y las rutas de salud pasan sin token")
+    void estadoDeServiciosYSaludPasanSinToken() {
+        for (String ruta : new String[] {
+                "/api/observabilidad/estado",
+                "/actuator/health",
+                "/actuator/health/liveness",
+                "/actuator/health/readiness"}) {
+            MockServerWebExchange exchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.get(ruta).build());
+
+            AtomicReference<ServerWebExchange> reenviado = new AtomicReference<>();
+            GatewayFilterChain chain = ex -> {
+                reenviado.set(ex);
+                return Mono.empty();
+            };
+
+            StepVerifier.create(filtro.filter(exchange, chain)).verifyComplete();
+
+            assertEquals(ruta, reenviado.get().getRequest().getURI().getPath());
+            assertNull(exchange.getResponse().getStatusCode(), ruta);
+        }
+        verify(verificadorRemoto, never()).validarRemoto(anyString());
     }
 }

@@ -1,5 +1,6 @@
 package mx.distrinubs.identidad;
 
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -56,8 +58,10 @@ public class IdentidadService {
         String contrasena = request.contrasena();
 
         List<CuentaAutenticacion> cuentas = jdbc.query(
+                // floor y no redondeo: un token emitido justo antes de una revocación o un
+                // bloqueo no debe quedar fechado después de ella.
                 "SELECT id, usuario, nombre, contrasena_hash, rol, bloqueada, revocada_desde, "
-                        + "(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint AS ahora_ms "
+                        + "floor(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint AS ahora_ms "
                         + "FROM cuentas WHERE LOWER(usuario) = LOWER(?)",
                 (rs, rowNum) -> {
                     Timestamp rev = rs.getTimestamp("revocada_desde");
@@ -211,8 +215,23 @@ public class IdentidadService {
                     hash,
                     rol);
         } catch (DataIntegrityViolationException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "El usuario ya existe");
+            if (esViolacionUnicidad(e)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "El usuario ya existe");
+            }
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Los datos de la cuenta no son válidos");
         }
+    }
+
+    /** Solo la violación de unicidad significa que el usuario ya existe. */
+    private boolean esViolacionUnicidad(DataIntegrityViolationException e) {
+        for (Throwable causa = e; causa != null; causa = causa.getCause()) {
+            if (causa instanceof SQLException sqlEx) {
+                return "23505".equals(sqlEx.getSQLState());
+            }
+        }
+        return e instanceof DuplicateKeyException;
     }
 
     public void bloquearCuenta(long cuentaId) {

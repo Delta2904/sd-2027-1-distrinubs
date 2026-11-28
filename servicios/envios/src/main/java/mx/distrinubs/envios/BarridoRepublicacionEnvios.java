@@ -1,6 +1,8 @@
 package mx.distrinubs.envios;
 
-import java.util.Collections;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -24,10 +26,14 @@ public class BarridoRepublicacionEnvios {
 
     private static final Logger log = LoggerFactory.getLogger(BarridoRepublicacionEnvios.class);
 
+    /**
+     * Reclama los pendientes poniendo {@code publicado_en = now()} y devuelve, junto con
+     * cada id, el valor que tenía antes: hace falta para deshacer el reclamo de los que
+     * al final no se publiquen.
+     */
     private static final String SQL_RECLAMAR_PENDIENTES = """
-            UPDATE envios SET publicado_en = now()
-            WHERE id IN (
-              SELECT e.id FROM envios e
+            WITH candidatos AS (
+              SELECT e.id, e.publicado_en AS publicado_antes FROM envios e
               LEFT JOIN resultados r ON r.envio_id = e.id
               LEFT JOIN leases_evaluacion l ON l.envio_id = e.id
               WHERE e.estado = 'EN_COLA'
@@ -39,8 +45,13 @@ public class BarridoRepublicacionEnvios {
               ORDER BY e.llegada_en ASC, e.id ASC
               LIMIT ?
               FOR NO KEY UPDATE OF e SKIP LOCKED)
-            RETURNING id
+            UPDATE envios SET publicado_en = now()
+            FROM candidatos c
+            WHERE envios.id = c.id
+            RETURNING envios.id, c.publicado_antes
             """;
+
+    private record Reclamo(long envioId, Timestamp publicadoAntes) {}
 
     private final JdbcTemplate jdbc;
     private final PublicadorEnvios publicadorEnvios;
@@ -69,36 +80,67 @@ public class BarridoRepublicacionEnvios {
 
     @Scheduled(fixedDelayString = "${envios.barrido.intervalo-ms:15000}")
     public int republicarPendientes() {
-        List<Long> pendientes = jdbc.query(
+        List<Reclamo> reclamados = new ArrayList<>(jdbc.query(
                 SQL_RECLAMAR_PENDIENTES,
-                (rs, rowNum) -> rs.getLong("id"),
+                (rs, rowNum) -> new Reclamo(rs.getLong("id"), rs.getTimestamp("publicado_antes")),
                 maxTomas,
                 maxPublicaciones,
                 graciaSegundos,
                 esperaMaximaColaSegundos,
-                tamanoLote);
+                tamanoLote));
 
-        Collections.sort(pendientes);
+        reclamados.sort(Comparator.comparingLong(Reclamo::envioId));
 
+        // Sale de aquí cada envío cuyo mensaje ya está en la cola. Los que queden al
+        // terminar, por la razón que sea, pierden el reclamo en el finally.
+        List<Reclamo> sinPublicar = new ArrayList<>(reclamados);
         int publicados = 0;
-        for (int i = 0; i < pendientes.size(); i++) {
-            long envioId = pendientes.get(i);
-            if (publicadorEnvios.publicar(envioId)) {
-                jdbc.update("UPDATE envios SET veces_publicado = veces_publicado + 1 WHERE id = ?", envioId);
-                publicados++;
-            } else {
-                for (int j = i; j < pendientes.size(); j++) {
-                    jdbc.update("UPDATE envios SET publicado_en = NULL WHERE id = ?", pendientes.get(j));
+        try {
+            for (Reclamo reclamo : reclamados) {
+                long envioId = reclamo.envioId();
+                try {
+                    if (!publicadorEnvios.publicar(envioId)) {
+                        log.warn("RabbitMQ no aceptó el envío {} durante el barrido; se corta el lote", envioId);
+                        break;
+                    }
+                    sinPublicar.remove(reclamo);
+                    publicados++;
+                    jdbc.update("UPDATE envios SET veces_publicado = veces_publicado + 1 WHERE id = ?", envioId);
+                } catch (RuntimeException e) {
+                    // La falla de un envío no debe dejar a los demás sin publicar.
+                    log.warn("Falló el barrido del envío {}: {}", envioId, e.toString());
                 }
-                log.warn("RabbitMQ no aceptó el envío {} durante el barrido; se libera el reclamo de {} envíos",
-                        envioId, pendientes.size() - i);
-                break;
             }
+        } finally {
+            liberarReclamos(sinPublicar);
         }
 
         if (publicados > 0) {
             log.info("Barrido de republicación reencoló {} envíos pendientes", publicados);
         }
         return publicados;
+    }
+
+    /**
+     * Devuelve {@code publicado_en} a su valor anterior ({@code NULL} si el envío nunca se
+     * había publicado). Sin esto, un envío reclamado y sin mensaje no volvería a calificar
+     * hasta agotar la espera máxima en cola.
+     */
+    private void liberarReclamos(List<Reclamo> sinPublicar) {
+        for (Reclamo reclamo : sinPublicar) {
+            try {
+                if (reclamo.publicadoAntes() == null) {
+                    jdbc.update("UPDATE envios SET publicado_en = NULL WHERE id = ?", reclamo.envioId());
+                } else {
+                    jdbc.update("UPDATE envios SET publicado_en = ? WHERE id = ?",
+                            reclamo.publicadoAntes(), reclamo.envioId());
+                }
+            } catch (RuntimeException e) {
+                log.warn("No se pudo liberar el reclamo del envío {}: {}", reclamo.envioId(), e.toString());
+            }
+        }
+        if (!sinPublicar.isEmpty()) {
+            log.warn("El barrido liberó el reclamo de {} envíos que no se publicaron", sinPublicar.size());
+        }
     }
 }

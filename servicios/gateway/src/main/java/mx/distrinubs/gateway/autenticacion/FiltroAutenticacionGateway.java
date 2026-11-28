@@ -1,5 +1,7 @@
 package mx.distrinubs.gateway.autenticacion;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
@@ -33,6 +35,10 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
     public static final String HEADER_USUARIO_LOGIN = "X-Usuario-Login";
     public static final String HEADER_USUARIO_ROL = "X-Usuario-Rol";
 
+    /**
+     * Lista exacta de rutas que se atienden sin token. No hay prefijos: una ruta que
+     * no esté aquí exige token aunque empiece igual que una pública.
+     */
     private static final Set<String> RUTAS_GET_PUBLICAS = Set.of(
             "/",
             "/index.html",
@@ -44,6 +50,8 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
             "/api/concursos/activo/tabla",
             "/api/observabilidad/estado",
             "/actuator/health",
+            "/actuator/health/liveness",
+            "/actuator/health/readiness",
             "/actuator/info"
     );
 
@@ -63,7 +71,10 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         HttpMethod metodo = request.getMethod();
-        String ruta = request.getURI().getPath();
+        String ruta = rutaNormalizada(request.getURI());
+        if (ruta == null) {
+            return escribirError(exchange, HttpStatus.BAD_REQUEST, "Ruta inválida");
+        }
 
         if (esRutaPublica(metodo, ruta)) {
             ServerHttpRequest limpia = limpiarCabecerasIdentidad(request).build();
@@ -120,14 +131,25 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
         if (metodo == HttpMethod.POST && "/api/auth/login".equals(ruta)) {
             return true;
         }
-        if (metodo == HttpMethod.GET) {
-            if (RUTAS_GET_PUBLICAS.contains(ruta)
-                    || ruta.startsWith("/actuator/health/")
-                    || ruta.startsWith("/api/observabilidad/")) {
-                return true;
-            }
+        return metodo == HttpMethod.GET && RUTAS_GET_PUBLICAS.contains(ruta);
+    }
+
+    /**
+     * Devuelve la ruta ya decodificada, o {@code null} si no está en su forma normal:
+     * con segmentos {@code .} o {@code ..}, o con {@code //}. Así la ruta que se compara
+     * con la lista de públicas es la misma que recibe el servicio de destino.
+     */
+    private static String rutaNormalizada(URI uri) {
+        String ruta = uri.getPath();
+        if (ruta == null || ruta.contains("//")) {
+            return null;
         }
-        return false;
+        try {
+            String normalizada = new URI(null, null, ruta, null).normalize().getPath();
+            return ruta.equals(normalizada) ? ruta : null;
+        } catch (URISyntaxException e) {
+            return null;
+        }
     }
 
     private ServerHttpRequest.Builder limpiarCabecerasIdentidad(ServerHttpRequest request) {

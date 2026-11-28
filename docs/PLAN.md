@@ -81,7 +81,8 @@ Primero (paso 1):
 Autenticación (paso 3):
 - [x] Servicio `identidad` (`servicios/identidad/`): inicio de sesión con contraseña guardada con hash BCrypt, token JWT firmado con vencimiento, bloqueo y revocación de cuentas/tokens (`tokens_revocados`), y los roles alumno, organizador y administrador.
 - [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`), rechazar `alumnoId` ajeno para cualquier rol y dejar que cada usuario consulte según su dueño o supervisión. Con eso termina la suplantación por `alumnoId`.
-- [x] Filtro que valida el token en el gateway integrado en `servicios/gateway/` (pendiente de revisión por Joshua en el PR); aísla los errores de `identidad` respecto a los backends aguas abajo y propaga `X-Usuario-Id`, `X-Usuario-Login` y `X-Usuario-Rol`.
+- [x] Filtro que valida el token, ya integrado en `servicios/gateway/`: las rutas públicas son una lista exacta, rechaza las rutas sin normalizar, aísla los errores de `identidad` respecto a los backends aguas abajo y propaga `X-Usuario-Id`, `X-Usuario-Login` y `X-Usuario-Rol`. El gateway ya manda `/api/cuentas-demo` a `identidad`, que lista solo las cuentas de alumno no bloqueadas. Está cubierto con las pruebas de cada servicio.
+- [ ] Probar la autenticación de punta a punta con el Compose (front, gateway, `identidad` y `envios`): todavía no se ha hecho.
 - [ ] Acordar con Diego los claims del token y el orden de integración con su pantalla de inicio de sesión y `scripts/demo.py` (ya acepta `--contrasena`).
 
 Después:

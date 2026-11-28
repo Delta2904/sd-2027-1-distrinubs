@@ -7,14 +7,15 @@ API Gateway de Distrinubs para la etapa `02-separacion`.
 - Reenvío reactivo y balanceo dinámico hacia microservicios registrados en Eureka (`lb://<servicio>`).
 - Enrutamiento por prefijos:
   - `/api/concursos/**` -> `concursos`
-  - `/api/cuentas-demo/**` -> `concursos` (en el paso 1 conserva cuentas de demo)
+  - `/api/cuentas-demo/**` -> `identidad` (lista solo las cuentas de alumno que no están bloqueadas)
   - `/api/envios/**` -> `envios`
   - `/api/auth/**` -> `identidad`
   - `/api/identidad/**` -> `identidad`
   - `/api/marcador/**` -> `marcador` (cuando se separe)
 - **Filtro global de autenticación (`FiltroAutenticacionGateway`):**
-  - **Rutas públicas sin token:** `POST /api/auth/login`, `GET /api/cuentas-demo`, `GET /api/concursos/activo`, `GET /api/concursos/activo/tabla`, `GET /api/observabilidad/**`, `GET /actuator/health/**`, `GET /actuator/info`, peticiones `OPTIONS` y recursos estáticos (`/`, `/index.html`, `/app.js`, `/estilos.css`, `/favicon.ico`).
-  - **Rutas protegidas:** exige `Authorization: Bearer <token>` (HS256 con `sub` igual al id de cuenta en texto, `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs`, `exp`), verifica localmente firma y vencimiento (`VerificadorJwtGateway`) y confirma revocación/bloqueo contra `identidad` (`GET /api/auth/validar`). Si `identidad` cae o expira el timeout, responde `503 Service Unavailable` (falla cerrada); los errores posteriores de otros servicios aguas abajo no se enmascaran como falla de `identidad`.
+  - **Rutas públicas sin token:** es una lista exacta, sin prefijos: `POST /api/auth/login`, `GET /api/cuentas-demo`, `GET /api/concursos/activo`, `GET /api/concursos/activo/tabla`, `GET /api/observabilidad/estado`, `GET /actuator/health`, `GET /actuator/health/liveness`, `GET /actuator/health/readiness`, `GET /actuator/info`, peticiones `OPTIONS` y recursos estáticos (`/`, `/index.html`, `/app.js`, `/estilos.css`, `/favicon.ico`). Cualquier otra ruta exige token, aunque empiece igual que una pública.
+  - **Rutas sin normalizar:** una ruta con segmentos `.` o `..` (también codificados) o con `//` se rechaza con `400 Bad Request` antes de decidir si es pública.
+  - **Rutas protegidas:** exige `Authorization: Bearer <token>` (HS256 con `sub` igual al id de cuenta en texto, `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs`, `exp`), verifica localmente firma y vencimiento (`VerificadorJwtGateway`) y confirma revocación/bloqueo contra `identidad` (`GET /api/auth/validar`). Solo el `401` y el `403` de `identidad` se devuelven como tales. Si `identidad` cae, expira el timeout o responde cualquier otro código, el gateway responde `503 Service Unavailable` (falla cerrada); los errores posteriores de otros servicios aguas abajo no se enmascaran como falla de `identidad`.
   - **Cabeceras internas propagadas:** limpia cualquier cabecera `X-Usuario-*` recibida del cliente y propaga `X-Usuario-Id` (id numérico de cuenta), `X-Usuario-Login` (nombre de usuario) y `X-Usuario-Rol`.
 - Preparado para correr en múltiples réplicas (`--scale gateway=2`) detrás del balanceador nginx.
 
@@ -26,7 +27,7 @@ API Gateway de Distrinubs para la etapa `02-separacion`.
 - `IDENTIDAD_URL`: URL base del servicio `identidad` (por omisión: `http://identidad:8083`).
 - `IDENTIDAD_TIMEOUT_MS`: Tiempo máximo de espera hacia `identidad` en milisegundos (por omisión: `2000`).
 - `RUTA_CONCURSOS_URI`: URI de reenvío para concursos (por omisión: `lb://concursos`).
-- `RUTA_CUENTAS_DEMO_URI`: URI de reenvío para cuentas demo (por omisión: `lb://concursos`).
+- `RUTA_CUENTAS_DEMO_URI`: URI de reenvío para cuentas demo (por omisión: `lb://identidad`).
 - `RUTA_ENVIOS_URI`: URI de reenvío para envíos (por omisión: `lb://envios`).
 - `RUTA_AUTH_URI`: URI de reenvío para autenticación (por omisión: `lb://identidad`).
 - `RUTA_IDENTIDAD_URI`: URI de reenvío para administración de cuentas (por omisión: `lb://identidad`).

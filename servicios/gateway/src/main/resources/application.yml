@@ -16,7 +16,7 @@ spring:
             - Path=/api/concursos/**
 
         - id: ruta-cuentas-demo
-          uri: ${RUTA_CUENTAS_DEMO_URI:lb://concursos}
+          uri: ${RUTA_CUENTAS_DEMO_URI:lb://identidad}
           predicates:
             - Path=/api/cuentas-demo/**
 
