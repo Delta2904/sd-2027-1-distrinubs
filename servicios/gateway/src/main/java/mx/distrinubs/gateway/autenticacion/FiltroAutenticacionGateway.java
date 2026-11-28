@@ -1,6 +1,7 @@
 package mx.distrinubs.gateway.autenticacion;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Set;
 
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -29,7 +30,7 @@ import reactor.core.publisher.Mono;
 public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
 
     public static final String HEADER_USUARIO_ID = "X-Usuario-Id";
-    public static final String HEADER_USUARIO_SUB = "X-Usuario-Sub";
+    public static final String HEADER_USUARIO_LOGIN = "X-Usuario-Login";
     public static final String HEADER_USUARIO_ROL = "X-Usuario-Rol";
 
     private static final Set<String> RUTAS_GET_PUBLICAS = Set.of(
@@ -41,8 +42,12 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
             "/api/cuentas-demo",
             "/api/concursos/activo",
             "/api/concursos/activo/tabla",
-            "/actuator/health"
+            "/api/observabilidad/estado",
+            "/actuator/health",
+            "/actuator/info"
     );
+
+    private record ResultadoRemoto(SesionGateway sesion, Throwable error) {}
 
     private final VerificadorJwtGateway verificadorJwt;
     private final VerificadorRemotoIdentidad verificadorRemoto;
@@ -80,21 +85,26 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
                 : "Bearer " + authHeader.trim();
 
         return verificadorRemoto.validarRemoto(headerNormalizado)
-                .flatMap(sesion -> {
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE, "Servicio de identidad no disponible")))
+                .map(sesion -> new ResultadoRemoto(sesion, null))
+                .onErrorResume(error -> Mono.just(new ResultadoRemoto(null, error)))
+                .flatMap(resultado -> {
+                    if (resultado.error() != null) {
+                        if (resultado.error() instanceof ResponseStatusException rse) {
+                            return escribirError(exchange, rse.getStatusCode(),
+                                    rse.getReason() != null ? rse.getReason() : "Acceso rechazado");
+                        }
+                        return escribirError(exchange, HttpStatus.SERVICE_UNAVAILABLE,
+                                "Servicio de identidad no disponible");
+                    }
+                    SesionGateway sesion = resultado.sesion();
                     ServerHttpRequest requestAutenticado = limpiarCabecerasIdentidad(request)
                             .header(HEADER_USUARIO_ID, String.valueOf(sesion.cuentaId()))
-                            .header(HEADER_USUARIO_SUB, sesion.usuario())
+                            .header(HEADER_USUARIO_LOGIN, sesion.usuario())
                             .header(HEADER_USUARIO_ROL, sesion.rol())
                             .build();
                     return chain.filter(exchange.mutate().request(requestAutenticado).build());
-                })
-                .onErrorResume(error -> {
-                    if (error instanceof ResponseStatusException rse) {
-                        return escribirError(exchange, rse.getStatusCode(),
-                                rse.getReason() != null ? rse.getReason() : "Acceso rechazado");
-                    }
-                    return escribirError(exchange, HttpStatus.SERVICE_UNAVAILABLE,
-                            "Servicio de identidad no disponible");
                 });
     }
 
@@ -111,7 +121,9 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
             return true;
         }
         if (metodo == HttpMethod.GET) {
-            if (RUTAS_GET_PUBLICAS.contains(ruta) || ruta.startsWith("/actuator/health/")) {
+            if (RUTAS_GET_PUBLICAS.contains(ruta)
+                    || ruta.startsWith("/actuator/health/")
+                    || ruta.startsWith("/api/observabilidad/")) {
                 return true;
             }
         }
@@ -121,8 +133,12 @@ public class FiltroAutenticacionGateway implements GlobalFilter, Ordered {
     private ServerHttpRequest.Builder limpiarCabecerasIdentidad(ServerHttpRequest request) {
         return request.mutate().headers(headers -> {
             headers.remove(HEADER_USUARIO_ID);
-            headers.remove(HEADER_USUARIO_SUB);
+            headers.remove(HEADER_USUARIO_LOGIN);
             headers.remove(HEADER_USUARIO_ROL);
+            List<String> cabecerasUsuario = headers.keySet().stream()
+                    .filter(k -> k.regionMatches(true, 0, "X-Usuario-", 0, 10))
+                    .toList();
+            cabecerasUsuario.forEach(headers::remove);
         });
     }
 

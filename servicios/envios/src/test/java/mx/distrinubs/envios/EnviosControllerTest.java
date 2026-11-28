@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Collections;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -243,7 +245,7 @@ class EnviosControllerTest {
                 eq(2L),
                 eq("PYTHON3"),
                 eq("print('hola')")))
-                .thenThrow(new DataIntegrityViolationException("unique violation"));
+                .thenThrow(new DuplicateKeyException("unique violation", new SQLException("duplicate key", "23505")));
         when(jdbc.query(
                 eq("SELECT id FROM envios WHERE cuenta_id = ? AND id_intento = ?"),
                 any(RowMapper.class),
@@ -350,5 +352,107 @@ class EnviosControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado", equalTo("evaluando")));
+    }
+
+    @Test
+    @DisplayName("POST /api/envios con violación CHECK (23514) responde 400 sin tratarla como duplicado")
+    void crearEnvio_CheckViolationResponde400SinBuscarDuplicado() throws Exception {
+        UUID intentoId = UUID.randomUUID();
+        String token = firmarJwt(1L, "alumno1", "ALUMNO", Instant.now().getEpochSecond() + 3600);
+        when(clienteIdentidad.validar("Bearer " + token))
+                .thenReturn(new SesionAutenticada(1L, "alumno1", "Alumno Uno", "ALUMNO", 9999999999L, "jti-1"));
+
+        when(jdbc.queryForObject(eq("SELECT COUNT(*) FROM cuentas WHERE id = ?"), eq(Integer.class), eq(1L)))
+                .thenReturn(1);
+        when(jdbc.queryForObject(eq("SELECT COUNT(*) FROM problemas WHERE id = ?"), eq(Integer.class), eq(2L)))
+                .thenReturn(1);
+        when(jdbc.queryForObject(
+                anyString(),
+                eq(Long.class),
+                eq(intentoId),
+                eq(1L),
+                eq(2L),
+                eq("PYTHON3"),
+                eq("print('hola')")))
+                .thenThrow(new DataIntegrityViolationException(
+                        "check violation",
+                        new SQLException("check constraint", "23514")));
+
+        String json = """
+                {
+                  "problemaId": 2,
+                  "intentoId": "%s",
+                  "lenguaje": "PYTHON3",
+                  "codigo": "print('hola')"
+                }
+                """.formatted(intentoId);
+
+        mockMvc.perform(post("/api/envios")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest());
+
+        verify(jdbc, never()).query(
+                eq("SELECT id FROM envios WHERE cuenta_id = ? AND id_intento = ?"),
+                any(RowMapper.class),
+                anyLong(),
+                any(UUID.class));
+        verify(publicadorEnvios, never()).publicar(anyLong());
+    }
+
+    @Test
+    @DisplayName("POST /api/envios con alumnoId ajeno responde 403 incluso para ORGANIZADOR")
+    void crearEnvio_OrganizadorConAlumnoIdAjenoResponde403() throws Exception {
+        String tokenOrg = firmarJwt(10L, "organizador1", "ORGANIZADOR", Instant.now().getEpochSecond() + 3600);
+        when(clienteIdentidad.validar("Bearer " + tokenOrg))
+                .thenReturn(new SesionAutenticada(10L, "organizador1", "Org", "ORGANIZADOR", 9999999999L, "jti-2"));
+
+        String json = """
+                {
+                  "alumnoId": 2,
+                  "problemaId": 1,
+                  "intentoId": "%s",
+                  "lenguaje": "PYTHON3",
+                  "codigo": "print(5)"
+                }
+                """.formatted(UUID.randomUUID());
+
+        mockMvc.perform(post("/api/envios")
+                        .header("Authorization", "Bearer " + tokenOrg)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isForbidden());
+
+        verify(publicadorEnvios, never()).publicar(anyLong());
+    }
+
+    @Test
+    @DisplayName("Un rol desconocido recibe 403 Forbidden en POST y GET /api/envios")
+    void rolDesconocidoRecibe403() throws Exception {
+        String tokenInvitado = firmarJwt(99L, "invitado", "INVITADO", Instant.now().getEpochSecond() + 3600);
+        when(clienteIdentidad.validar("Bearer " + tokenInvitado))
+                .thenReturn(new SesionAutenticada(99L, "invitado", "Invitado", "INVITADO", 9999999999L, "jti-99"));
+
+        String json = """
+                {
+                  "problemaId": 1,
+                  "intentoId": "%s",
+                  "lenguaje": "PYTHON3",
+                  "codigo": "print(5)"
+                }
+                """.formatted(UUID.randomUUID());
+
+        mockMvc.perform(post("/api/envios")
+                        .header("Authorization", "Bearer " + tokenInvitado)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/envios/100")
+                        .header("Authorization", "Bearer " + tokenInvitado))
+                .andExpect(status().isForbidden());
+
+        verify(publicadorEnvios, never()).publicar(anyLong());
     }
 }

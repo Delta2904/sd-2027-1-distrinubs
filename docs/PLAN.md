@@ -80,8 +80,8 @@ Primero (paso 1):
 
 Autenticación (paso 3):
 - [x] Servicio `identidad` (`servicios/identidad/`): inicio de sesión con contraseña guardada con hash BCrypt, token JWT firmado con vencimiento, bloqueo y revocación de cuentas/tokens (`tokens_revocados`), y los roles alumno, organizador y administrador.
-- [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`) y dejar que cada alumno envíe y consulte solo lo suyo. Con eso termina la suplantación por `alumnoId`.
-- [ ] Filtro que valida el token en el gateway (`servicios/filtro-gateway-token/`): implementado y probado; pendiente integrarlo vía pull request cuando Joshua suba el servicio `gateway`.
+- [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`), rechazar `alumnoId` ajeno para cualquier rol y dejar que cada usuario consulte según su dueño o supervisión. Con eso termina la suplantación por `alumnoId`.
+- [x] Filtro que valida el token en el gateway integrado en `servicios/gateway/` (pendiente de revisión por Joshua en el PR); aísla los errores de `identidad` respecto a los backends aguas abajo y propaga `X-Usuario-Id`, `X-Usuario-Login` y `X-Usuario-Rol`.
 - [ ] Acordar con Diego los claims del token y el orden de integración con su pantalla de inicio de sesión y `scripts/demo.py` (ya acepta `--contrasena`).
 
 Después:

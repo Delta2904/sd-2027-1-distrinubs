@@ -78,7 +78,9 @@ class FiltroAutenticacionGatewayTest {
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
                         .header(FiltroAutenticacionGateway.HEADER_USUARIO_ID, "999")
+                        .header(FiltroAutenticacionGateway.HEADER_USUARIO_LOGIN, "falso")
                         .header(FiltroAutenticacionGateway.HEADER_USUARIO_ROL, "ADMINISTRADOR")
+                        .header("X-Usuario-Sub", "falso")
                         .build());
 
         AtomicReference<ServerWebExchange> reenviado = new AtomicReference<>();
@@ -89,8 +91,11 @@ class FiltroAutenticacionGatewayTest {
 
         StepVerifier.create(filtro.filter(exchange, chain)).verifyComplete();
 
-        assertNull(reenviado.get().getRequest().getHeaders().getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_ID));
-        assertNull(reenviado.get().getRequest().getHeaders().getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_ROL));
+        HttpHeaders headers = reenviado.get().getRequest().getHeaders();
+        assertNull(headers.getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_ID));
+        assertNull(headers.getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_LOGIN));
+        assertNull(headers.getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_ROL));
+        assertNull(headers.getFirst("X-Usuario-Sub"));
         verify(verificadorRemoto, never()).validarRemoto(anyString());
     }
 
@@ -167,7 +172,28 @@ class FiltroAutenticacionGatewayTest {
 
         HttpHeaders headers = reenviado.get().getRequest().getHeaders();
         assertEquals("4", headers.getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_ID));
-        assertEquals("alumno4", headers.getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_SUB));
+        assertEquals("alumno4", headers.getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_LOGIN));
         assertEquals("ALUMNO", headers.getFirst(FiltroAutenticacionGateway.HEADER_USUARIO_ROL));
+    }
+
+    @Test
+    @DisplayName("Error en backend aguas abajo se propaga sin enmascararse como caída de identidad")
+    void errorDeBackendAguasAbajoNoSeEnmascaraComoIdentidadCaida() throws Exception {
+        String token = firmarJwt(1L, "alumno1", "ALUMNO");
+        when(verificadorRemoto.validarRemoto("Bearer " + token))
+                .thenReturn(Mono.just(new SesionGateway(1L, "alumno1", "Alumno Uno", "ALUMNO", 9999999999L, "jti-1")));
+
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/envios")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .build());
+
+        GatewayFilterChain chain = ex -> Mono.error(new RuntimeException("envios caído"));
+
+        StepVerifier.create(filtro.filter(exchange, chain))
+                .expectErrorMessage("envios caído")
+                .verify();
+
+        assertNull(exchange.getResponse().getStatusCode());
     }
 }

@@ -20,17 +20,21 @@ siembra:
   activa: ${SIEMBRA_ACTIVA:true}
   cuentas-carga: ${SIEMBRA_CUENTAS_CARGA:0}
   contrasena-demo: ${SIEMBRA_CONTRASENA_DEMO}
+  contrasena-admin: ${SIEMBRA_CONTRASENA_ADMIN}
 
 server:
-  port: ${IDENTIDAD_PUERTO:8083}
+  port: ${PORT:8083}
 
 eureka:
   client:
-    enabled: ${EUREKA_ACTIVO:false}
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
     service-url:
-      defaultZone: ${EUREKA_URL:http://eureka:8761/eureka/}
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: ${EUREKA_CLIENT_ENABLED:true}
+    fetch-registry: ${EUREKA_CLIENT_ENABLED:true}
   instance:
     prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
 
 management:
   endpoints:

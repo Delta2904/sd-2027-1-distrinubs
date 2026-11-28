@@ -17,6 +17,10 @@ spring:
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:500ms}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 envios:
   lenguajes-permitidos: ${ENVIOS_LENGUAJES:PYTHON3}
@@ -28,6 +32,7 @@ envios:
     dlq: envios.evaluacion.dlq
     dlq-routing-key: envios.evaluacion.dlq
     limite-entregas: ${ENVIOS_LIMITE_ENTREGAS:3}
+    confirm-timeout-ms: ${ENVIOS_CONFIRM_TIMEOUT_MS:1000}
   barrido:
     activo: ${ENVIOS_BARRIDO_ACTIVO:true}
     intervalo-ms: ${ENVIOS_BARRIDO_INTERVALO_MS:15000}
@@ -42,15 +47,18 @@ envios:
     timeout-ms: ${IDENTIDAD_TIMEOUT_MS:2000}
 
 server:
-  port: ${ENVIOS_PUERTO:8081}
+  port: ${PORT:8081}
 
 eureka:
   client:
-    enabled: ${EUREKA_ACTIVO:false}
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
     service-url:
-      defaultZone: ${EUREKA_URL:http://eureka:8761/eureka/}
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: ${EUREKA_CLIENT_ENABLED:true}
+    fetch-registry: ${EUREKA_CLIENT_ENABLED:true}
   instance:
     prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
 
 management:
   endpoints:

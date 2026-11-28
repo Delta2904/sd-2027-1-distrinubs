@@ -26,6 +26,7 @@ public class IdentidadService {
     private final JdbcTemplate jdbc;
     private final TokenJwtService tokenJwtService;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final String hashRelleno = passwordEncoder.encode("contrasena-relleno-tiempo-constante-distrinubs");
 
     public IdentidadService(JdbcTemplate jdbc, TokenJwtService tokenJwtService) {
         this.jdbc = jdbc;
@@ -73,11 +74,16 @@ public class IdentidadService {
                 usuario);
 
         if (cuentas.isEmpty()) {
+            passwordEncoder.matches(contrasena, hashRelleno);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
         }
 
         CuentaAutenticacion cuenta = cuentas.get(0);
-        if (cuenta.contrasenaHash() == null || !passwordEncoder.matches(contrasena, cuenta.contrasenaHash())) {
+        if (cuenta.contrasenaHash() == null) {
+            passwordEncoder.matches(contrasena, hashRelleno);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
+        }
+        if (!passwordEncoder.matches(contrasena, cuenta.contrasenaHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
         }
 

@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Siembra idempotente de cuentas iniciales al arrancar el servicio {@code identidad},
- * con contraseñas almacenadas como hash BCrypt y roles asignados.
+ * con contraseñas almacenadas como hash BCrypt y roles asignados. Rota los hashes
+ * de las cuentas sembradas al cambiar las variables de contraseña sin sobrescribir roles
+ * ni bloqueos existentes.
  */
 @Component
 @DependsOnDatabaseInitialization
@@ -28,7 +30,7 @@ class SiembraCuentasIdentidad implements InitializingBean {
             ON CONFLICT (id) DO UPDATE
                 SET usuario         = EXCLUDED.usuario,
                     nombre          = EXCLUDED.nombre,
-                    contrasena_hash = COALESCE(cuentas.contrasena_hash, EXCLUDED.contrasena_hash)
+                    contrasena_hash = EXCLUDED.contrasena_hash
             """;
 
     private static final String SEMBRAR_CUENTAS_CARGA = """
@@ -38,40 +40,53 @@ class SiembraCuentasIdentidad implements InitializingBean {
             ON CONFLICT (id) DO UPDATE
                 SET usuario         = EXCLUDED.usuario,
                     nombre          = EXCLUDED.nombre,
-                    contrasena_hash = COALESCE(cuentas.contrasena_hash, EXCLUDED.contrasena_hash)
+                    contrasena_hash = EXCLUDED.contrasena_hash
             """;
 
     private final JdbcTemplate jdbc;
     private final int cuentasCarga;
     private final String contrasenaDemo;
+    private final String contrasenaAdmin;
 
     SiembraCuentasIdentidad(
             JdbcTemplate jdbc,
             @Value("${siembra.cuentas-carga:0}") int cuentasCarga,
-            @Value("${siembra.contrasena-demo}") String contrasenaDemo) {
+            @Value("${siembra.contrasena-demo}") String contrasenaDemo,
+            @Value("${siembra.contrasena-admin}") String contrasenaAdmin) {
         if (cuentasCarga < 0 || cuentasCarga > MAXIMO_CUENTAS_CARGA) {
             throw new IllegalArgumentException(
                     "siembra.cuentas-carga debe estar entre 0 y " + MAXIMO_CUENTAS_CARGA);
         }
         if (contrasenaDemo == null || contrasenaDemo.isBlank()) {
-            throw new IllegalArgumentException("Falta SIEMBRA_CONTRASENA_DEMO para sembrar las cuentas");
+            throw new IllegalArgumentException("Falta SIEMBRA_CONTRASENA_DEMO para sembrar las cuentas de alumnos");
+        }
+        if (contrasenaAdmin == null || contrasenaAdmin.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Falta SIEMBRA_CONTRASENA_ADMIN para sembrar las cuentas de administración y organización");
+        }
+        if (contrasenaAdmin.equals(contrasenaDemo)) {
+            throw new IllegalArgumentException(
+                    "SIEMBRA_CONTRASENA_ADMIN debe ser distinta de SIEMBRA_CONTRASENA_DEMO");
         }
         this.jdbc = jdbc;
         this.cuentasCarga = cuentasCarga;
         this.contrasenaDemo = contrasenaDemo;
+        this.contrasenaAdmin = contrasenaAdmin;
     }
 
     @Override
     public void afterPropertiesSet() {
-        String hashDemo = new BCryptPasswordEncoder().encode(contrasenaDemo);
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        String hashDemo = encoder.encode(contrasenaDemo);
+        String hashAdmin = encoder.encode(contrasenaAdmin);
 
         jdbc.update(UPSERT_CUENTA, 1L, "alumno1", "Alumno Uno", hashDemo, "ALUMNO");
         jdbc.update(UPSERT_CUENTA, 2L, "alumno2", "Alumno Dos", hashDemo, "ALUMNO");
         jdbc.update(UPSERT_CUENTA, 3L, "alumno3", "Alumno Tres", hashDemo, "ALUMNO");
         jdbc.update(UPSERT_CUENTA, 4L, "alumno4", "Alumno Cuatro", hashDemo, "ALUMNO");
         jdbc.update(UPSERT_CUENTA, 5L, "alumno5", "Alumno Cinco", hashDemo, "ALUMNO");
-        jdbc.update(UPSERT_CUENTA, 10L, "organizador1", "Organizador Distrinubs", hashDemo, "ORGANIZADOR");
-        jdbc.update(UPSERT_CUENTA, 11L, "admin", "Administrador Distrinubs", hashDemo, "ADMINISTRADOR");
+        jdbc.update(UPSERT_CUENTA, 10L, "organizador1", "Organizador Distrinubs", hashAdmin, "ORGANIZADOR");
+        jdbc.update(UPSERT_CUENTA, 11L, "admin", "Administrador Distrinubs", hashAdmin, "ADMINISTRADOR");
 
         if (cuentasCarga > 0) {
             jdbc.update(SEMBRAR_CUENTAS_CARGA, hashDemo, cuentasCarga);

@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -67,7 +68,7 @@ class IdentidadIntegracionTest {
         TokenJwtService tokenService = new TokenJwtService(
                 mapper, "secreto-integracion-identidad-distrinubs", 3600);
         IdentidadService identidadService = new IdentidadService(jdbc, tokenService);
-        siembra = new SiembraCuentasIdentidad(jdbc, 0, "distrinubs");
+        siembra = new SiembraCuentasIdentidad(jdbc, 0, "distrinubs", "claveAdminSegura!");
         siembra.afterPropertiesSet();
 
         mockMvc = MockMvcBuilders.standaloneSetup(
@@ -172,7 +173,7 @@ class IdentidadIntegracionTest {
     @DisplayName("Bloquear cuenta revoca sus tokens activos e impide nuevos inicios de sesión hasta desbloquear")
     void bloquearYDesbloquearCuenta() throws Exception {
         String tokenAlumno = iniciarSesion("alumno2", "distrinubs");
-        String tokenAdmin = iniciarSesion("admin", "distrinubs");
+        String tokenAdmin = iniciarSesion("admin", "claveAdminSegura!");
 
         mockMvc.perform(post("/api/identidad/cuentas/2/bloquear")
                         .header("Authorization", "Bearer " + tokenAdmin))
@@ -225,7 +226,7 @@ class IdentidadIntegracionTest {
     @Test
     @DisplayName("Admin crea cuenta, cambia su rol y la nueva cuenta puede autenticarse")
     void adminCreaCuentaYCambiaRol() throws Exception {
-        String tokenAdmin = iniciarSesion("admin", "distrinubs");
+        String tokenAdmin = iniciarSesion("admin", "claveAdminSegura!");
 
         MvcResult creada = mockMvc.perform(post("/api/identidad/cuentas")
                         .header("Authorization", "Bearer " + tokenAdmin)
@@ -264,7 +265,7 @@ class IdentidadIntegracionTest {
     @Test
     @DisplayName("GET /api/cuentas-demo lista solo alumnos activos")
     void listaCuentasDemoSoloAlumnosActivos() throws Exception {
-        String tokenAdmin = iniciarSesion("admin", "distrinubs");
+        String tokenAdmin = iniciarSesion("admin", "claveAdminSegura!");
         mockMvc.perform(post("/api/identidad/cuentas/3/bloquear")
                         .header("Authorization", "Bearer " + tokenAdmin))
                 .andExpect(status().isOk());
@@ -290,7 +291,7 @@ class IdentidadIntegracionTest {
     @Test
     @DisplayName("Reiniciar la siembra conserva los cambios de rol hechos por el administrador")
     void siembraConservaCambiosDeRol() throws Exception {
-        String tokenAdmin = iniciarSesion("admin", "distrinubs");
+        String tokenAdmin = iniciarSesion("admin", "claveAdminSegura!");
 
         mockMvc.perform(patch("/api/identidad/cuentas/2/rol")
                         .header("Authorization", "Bearer " + tokenAdmin)
@@ -310,7 +311,7 @@ class IdentidadIntegracionTest {
     @Test
     @DisplayName("Los usuarios se normalizan a minúsculas y no se duplican por mayúsculas")
     void usuariosUnicosSinDistinguirMayusculas() throws Exception {
-        String tokenAdmin = iniciarSesion("admin", "distrinubs");
+        String tokenAdmin = iniciarSesion("admin", "claveAdminSegura!");
 
         mockMvc.perform(post("/api/identidad/cuentas")
                         .header("Authorization", "Bearer " + tokenAdmin)
@@ -344,5 +345,66 @@ class IdentidadIntegracionTest {
                                 }
                                 """))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Admin y organizador rechazan la contraseña de demo y usan SIEMBRA_CONTRASENA_ADMIN")
+    void adminYOrganizadorUsanContrasenaPropia() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"usuario": "admin", "contrasena": "distrinubs"}
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"usuario": "organizador1", "contrasena": "distrinubs"}
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        iniciarSesion("admin", "claveAdminSegura!");
+        iniciarSesion("organizador1", "claveAdminSegura!");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new SiembraCuentasIdentidad(jdbc, 0, "misma", "misma"));
+    }
+
+    @Test
+    @DisplayName("Cambiar las variables de siembra rota las contraseñas al reiniciar sin sobrescribir roles")
+    void siembraRotaContrasenasSinSobrescribirRoles() throws Exception {
+        String tokenAdmin = iniciarSesion("admin", "claveAdminSegura!");
+
+        mockMvc.perform(patch("/api/identidad/cuentas/2/rol")
+                        .header("Authorization", "Bearer " + tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"rol": "ORGANIZADOR"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rol", equalTo("ORGANIZADOR")));
+
+        new SiembraCuentasIdentidad(jdbc, 0, "nuevaClaveDemo", "nuevaClaveAdmin").afterPropertiesSet();
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"usuario": "alumno1", "contrasena": "distrinubs"}
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"usuario": "admin", "contrasena": "claveAdminSegura!"}
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        iniciarSesion("alumno1", "nuevaClaveDemo");
+        iniciarSesion("admin", "nuevaClaveAdmin");
+
+        String rolActual = jdbc.queryForObject("SELECT rol FROM cuentas WHERE id = 2", String.class);
+        assertEquals("ORGANIZADOR", rolActual);
     }
 }

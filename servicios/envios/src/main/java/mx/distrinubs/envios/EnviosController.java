@@ -1,5 +1,6 @@
 package mx.distrinubs.envios;
 
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -9,6 +10,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,6 +36,9 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/envios")
 public class EnviosController {
+
+    private static final Set<String> ROLES_PERMITIDOS = Set.of("ALUMNO", "ORGANIZADOR", "ADMINISTRADOR");
+    private static final Set<String> ROLES_SUPERVISION = Set.of("ORGANIZADOR", "ADMINISTRADOR");
 
     private final JdbcTemplate jdbc;
     private final PublicadorEnvios publicadorEnvios;
@@ -62,10 +67,9 @@ public class EnviosController {
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @Valid @RequestBody CrearEnvioRequest request) {
         SesionAutenticada sesion = validadorToken.validar(authHeader);
+        exigirRolPermitido(sesion.rol());
 
-        if (request.alumnoId() != null
-                && "ALUMNO".equalsIgnoreCase(sesion.rol())
-                && !request.alumnoId().equals(sesion.cuentaId())) {
+        if (request.alumnoId() != null && !request.alumnoId().equals(sesion.cuentaId())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "No puedes enviar soluciones en nombre de otra cuenta");
@@ -142,14 +146,16 @@ public class EnviosController {
                     .body(new EnvioCreadoResponse(idGenerado != null ? idGenerado : 0L, "recibido"));
 
         } catch (DataIntegrityViolationException e) {
-            List<Long> existentes = jdbc.query(
-                    "SELECT id FROM envios WHERE cuenta_id = ? AND id_intento = ?",
-                    (rs, rowNum) -> rs.getLong("id"),
-                    cuentaId,
-                    intentoUuid);
+            if (esViolacionUnicidad(e)) {
+                List<Long> existentes = jdbc.query(
+                        "SELECT id FROM envios WHERE cuenta_id = ? AND id_intento = ?",
+                        (rs, rowNum) -> rs.getLong("id"),
+                        cuentaId,
+                        intentoUuid);
 
-            if (!existentes.isEmpty()) {
-                return ResponseEntity.ok(new EnvioCreadoResponse(existentes.get(0), "recibido"));
+                if (!existentes.isEmpty()) {
+                    return ResponseEntity.ok(new EnvioCreadoResponse(existentes.get(0), "recibido"));
+                }
             }
 
             throw new ResponseStatusException(
@@ -163,6 +169,7 @@ public class EnviosController {
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @PathVariable Long envioId) {
         SesionAutenticada sesion = validadorToken.validar(authHeader);
+        String rol = exigirRolPermitido(sesion.rol());
 
         List<EnvioBasico> envios = jdbc.query(
                 "SELECT cuenta_id, estado FROM envios WHERE id = ?",
@@ -174,7 +181,7 @@ public class EnviosController {
         }
 
         EnvioBasico envio = envios.get(0);
-        if ("ALUMNO".equalsIgnoreCase(sesion.rol()) && envio.cuentaId() != sesion.cuentaId()) {
+        if (envio.cuentaId() != sesion.cuentaId() && !ROLES_SUPERVISION.contains(rol)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "No tienes permiso para consultar un envío de otra cuenta");
@@ -220,5 +227,24 @@ public class EnviosController {
                 null,
                 null,
                 null));
+    }
+
+    private String exigirRolPermitido(String rolRaw) {
+        String rol = rolRaw == null ? "" : rolRaw.trim().toUpperCase(Locale.ROOT);
+        if (!ROLES_PERMITIDOS.contains(rol)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Rol sin permiso para operar sobre envíos");
+        }
+        return rol;
+    }
+
+    private boolean esViolacionUnicidad(DataIntegrityViolationException e) {
+        for (Throwable causa = e; causa != null; causa = causa.getCause()) {
+            if (causa instanceof SQLException sqlEx) {
+                return "23505".equals(sqlEx.getSQLState());
+            }
+        }
+        return e instanceof DuplicateKeyException;
     }
 }

@@ -172,4 +172,15 @@ class BarridoRepublicacionEnviosTest {
         assertEquals(1, jdbc.queryForObject(
                 "SELECT veces_publicado FROM envios WHERE id = ?", Integer.class, segundo));
     }
+
+    @Test
+    @DisplayName("La migración permite insertar envíos con los lenguajes ampliados (CPP, C, JAVA, JAVASCRIPT)")
+    void permiteLenguajesAmpliadosTrasMigracion() {
+        Long idCpp = jdbc.queryForObject(
+                "INSERT INTO envios (id_intento, cuenta_id, problema_id, lenguaje, codigo, estado) "
+                        + "VALUES (?, 1, 1, 'CPP', 'int main(){}', 'EN_COLA') RETURNING id",
+                Long.class,
+                UUID.randomUUID());
+        assertNotNull(idCpp);
+    }
 }
