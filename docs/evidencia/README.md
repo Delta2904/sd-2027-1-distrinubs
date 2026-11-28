@@ -11,8 +11,9 @@ Salidas de la prueba final de la etapa 2, corrida desde cero con `docker compose
 | `2026-11-28-caso2-diez-corridas.txt` | El caso de la réplica del gateway apagada, diez veces seguidas, con el código y el tiempo de cada petición |
 | `2026-11-28-circuit-breaker.txt` | El circuit breaker del gateway con `concursos` muerto: código, tiempo y cuerpo de cada petición |
 | `2026-11-28-cola-mensajes-muertos.txt` | Un mensaje sin `envioId` publicado a mano termina en `envios.evaluacion.dlq` |
+| `2026-11-28-id-correlacion.txt` | Una petición con un id de correlación conocido, y ese id en los logs de nginx, del gateway, de `identidad` y de `envios` |
 | `2026-11-28-pruebas-por-modulo.txt` | Conteo de pruebas de cada módulo, corridas dentro de Docker con JDK 21 |
 
 Las corridas se hicieron con `COMPOSE_PROJECT_NAME=distrinubs-cierre`, para no borrar el volumen de desarrollo. Por eso los contenedores aparecen como `distrinubs-cierre-<servicio>-<n>`; con el nombre por omisión se llaman `sd-2027-1-distrinubs-<servicio>-<n>`.
 
-La prueba del circuit breaker se hizo antes de la corrida final, con el mismo código.
+Las pruebas del circuit breaker y de la cola de mensajes muertos se hicieron en corridas anteriores del mismo día; el código de esas piezas no cambió después.

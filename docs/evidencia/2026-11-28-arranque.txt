@@ -2,19 +2,19 @@ Arranque desde cero, 2026-11-28
 Comandos: docker compose down -v; docker compose up -d --build
 Las imágenes ya estaban construidas; la primera construcción tarda unos minutos más.
 
-Segundos desde `docker compose up -d --build` hasta que los 12 contenedores quedaron healthy: 28
+Segundos desde `docker compose up -d --build` hasta que los 12 contenedores quedaron healthy: 32
 
 docker compose ps:
 SERVICE      STATUS                    PORTS
-app          Up 19 seconds (healthy)   8080/tcp
-concursos    Up 19 seconds (healthy)   8082/tcp
-db           Up 25 seconds (healthy)   127.0.0.1:5432->5432/tcp
-envios       Up 19 seconds (healthy)   8081/tcp
-eureka       Up 25 seconds (healthy)   127.0.0.1:8761->8761/tcp
-evaluacion   Up 19 seconds (healthy)   8085/tcp
-evaluacion   Up 18 seconds (healthy)   8085/tcp
+app          Up 23 seconds (healthy)   8080/tcp
+concursos    Up 23 seconds (healthy)   8082/tcp
+db           Up 29 seconds (healthy)   127.0.0.1:5432->5432/tcp
+envios       Up 23 seconds (healthy)   8081/tcp
+eureka       Up 29 seconds (healthy)   127.0.0.1:8761->8761/tcp
+evaluacion   Up 23 seconds (healthy)   8085/tcp
+evaluacion   Up 23 seconds (healthy)   8085/tcp
 gateway      Up 13 seconds (healthy)   8080/tcp
-gateway      Up 13 seconds (healthy)   8080/tcp
-identidad    Up 18 seconds (healthy)   8083/tcp
+gateway      Up 12 seconds (healthy)   8080/tcp
+identidad    Up 24 seconds (healthy)   8083/tcp
 nginx        Up 7 seconds (healthy)    0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
-rabbitmq     Up 25 seconds (healthy)   127.0.0.1:15672->15672/tcp
+rabbitmq     Up 30 seconds (healthy)   127.0.0.1:15672->15672/tcp

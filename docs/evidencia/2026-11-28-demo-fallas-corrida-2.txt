@@ -21,49 +21,49 @@ Eureka:  http://localhost:8761
   [1.4] Esperando a que un worker tome el envío (estado = 'evaluando')
       [OK]  Envío 5 en estado 'evaluando'.
   [1.5] Leyendo el lease del envío en la base de datos e identificando el contenedor del worker
-      [INFO] Lease antes de la falla: worker=worker-e2ee1573bdb8-221abffc-2, veces_tomado=1
-      [OK]  El worker corre en el contenedor distrinubs-cierre-evaluacion-1 (e2ee1573bdb8).
-  [1.6] Matando el contenedor distrinubs-cierre-evaluacion-1 (e2ee1573bdb8) con SIGKILL
-      [OK]  Contenedor e2ee1573bdb8 terminado abruptamente.
+      [INFO] Lease antes de la falla: worker=worker-59d79d53d864-702651fd-2, veces_tomado=1
+      [OK]  El worker corre en el contenedor distrinubs-cierre-evaluacion-1 (59d79d53d864).
+  [1.6] Matando el contenedor distrinubs-cierre-evaluacion-1 (59d79d53d864) con SIGKILL
+      [OK]  Contenedor 59d79d53d864 terminado abruptamente.
   [1.7] Esperando veredicto ACCEPTED (máx. 60 s): otro worker retoma el envío cuando vence el lease
-      [INFO] Worker antes:   worker-e2ee1573bdb8-221abffc-2 (veces_tomado=1)
-      [INFO] Worker después: worker-f3b9d1e3f5f9-83281846-1 (veces_tomado=2)
+      [INFO] Worker antes:   worker-59d79d53d864-702651fd-2 (veces_tomado=1)
+      [INFO] Worker después: worker-32ae7c2cbc50-7c19c263-1 (veces_tomado=2)
       [OK]  El envío 5 terminó en ACCEPTED después de que otro worker lo retomó.
-      [INFO] Restaurando contenedor e2ee1573bdb8…
+      [INFO] Restaurando contenedor 59d79d53d864…
 
 ============================================================================
                    CASO 2: Apagar una réplica del Gateway                 
 ============================================================================
 
   [2.1] Verificando réplicas del servicio 'gateway' en Docker
-      [OK]  2 réplicas activas y entrada respondiendo HTTP 200 (Id: 03a38c3a…).
-  [2.2] Apagando réplica del gateway 1f2e7569f1c9 (docker stop)
-      [OK]  Réplica 1f2e7569f1c9 detenida.
+      [OK]  2 réplicas activas y entrada respondiendo HTTP 200 (Id: fd360e3c…).
+  [2.2] Apagando réplica del gateway c95cecf703f5 (docker stop)
+      [OK]  Réplica c95cecf703f5 detenida.
   [2.3] Enviando 8 peticiones por la entrada con una réplica apagada
-      [OK]  Petición 1/8 -> HTTP 200 (8 ms, Id: 4e107d9d…)
-      [OK]  Petición 2/8 -> HTTP 200 (1008 ms, Id: b6247ef2…)
-      [OK]  Petición 3/8 -> HTTP 200 (0 ms, Id: de1401e6…)
-      [OK]  Petición 4/8 -> HTTP 200 (12 ms, Id: 2cd69ec4…)
-      [OK]  Petición 5/8 -> HTTP 200 (0 ms, Id: d2f30741…)
-      [OK]  Petición 6/8 -> HTTP 200 (15 ms, Id: 9fb80b95…)
-      [OK]  Petición 7/8 -> HTTP 200 (0 ms, Id: 37f37667…)
-      [OK]  Petición 8/8 -> HTTP 200 (16 ms, Id: 2d98571f…)
+      [OK]  Petición 1/8 -> HTTP 200 (19 ms, Id: c7012eca…)
+      [OK]  Petición 2/8 -> HTTP 200 (1023 ms, Id: 979a9cd0…)
+      [OK]  Petición 3/8 -> HTTP 200 (8 ms, Id: 62066e6c…)
+      [OK]  Petición 4/8 -> HTTP 200 (8 ms, Id: 38cd47ab…)
+      [OK]  Petición 5/8 -> HTTP 200 (8 ms, Id: 6ba42c76…)
+      [OK]  Petición 6/8 -> HTTP 200 (8 ms, Id: 2f9abd2a…)
+      [OK]  Petición 7/8 -> HTTP 200 (8 ms, Id: 260b64f8…)
+      [OK]  Petición 8/8 -> HTTP 200 (9 ms, Id: 5b623f34…)
       [OK]  8/8 peticiones atendidas sin interrupción por la réplica superviviente.
-      [INFO] Restaurando réplica 1f2e7569f1c9...
+      [INFO] Restaurando réplica c95cecf703f5...
 
 ============================================================================
              CASO 3: Ver salir de Eureka a una instancia caída            
 ============================================================================
 
   [3.1] Consultando directorio Eureka en http://localhost:8761/eureka/apps
-      [INFO] Registrada en Eureka: ENVIOS | envios:d56ff048cb650909af5b83abc57e1bb3 | status=UP
-      [INFO] Registrada en Eureka: GATEWAY | gateway:d6e6938b7d2dddf17fd8e71a7b97134b | status=DOWN
-      [INFO] Registrada en Eureka: GATEWAY | gateway:ed5883a6aaeaacc4521642576da6929b | status=UP
-      [INFO] Registrada en Eureka: IDENTIDAD | identidad:2189065e2a81404fdc038bb26a1965e3 | status=UP
-      [INFO] Registrada en Eureka: CONCURSOS | concursos:5ed963fbed31fb2b02e8bca5c1c62113 | status=UP
-      [OK]  Instancia 'envios:d56ff048cb650909af5b83abc57e1bb3' de ENVIOS (ipAddr=172.20.0.5) emparejada con el contenedor distrinubs-cierre-envios-1 (56de154dc317).
-  [3.2] Matando instancia 'envios:d56ff048cb650909af5b83abc57e1bb3' (contenedor 56de154dc317) con docker kill
-      [OK]  Contenedor 56de154dc317 terminado abruptamente (SIGKILL).
+      [INFO] Registrada en Eureka: ENVIOS | envios:cf7d5e6e5c8eee2a42b69de3479556ea | status=UP
+      [INFO] Registrada en Eureka: GATEWAY | gateway:eeb29787bd387f50c0b2111263c5cf80 | status=DOWN
+      [INFO] Registrada en Eureka: GATEWAY | gateway:685c325e5474e9765cc36b4df89820ee | status=UP
+      [INFO] Registrada en Eureka: IDENTIDAD | identidad:475138b2e82466bfdbbd95a16eba11d7 | status=UP
+      [INFO] Registrada en Eureka: CONCURSOS | concursos:52285ea4ce5378a35702ff8be2d67275 | status=UP
+      [OK]  Instancia 'envios:cf7d5e6e5c8eee2a42b69de3479556ea' de ENVIOS (ipAddr=172.20.0.8) emparejada con el contenedor distrinubs-cierre-envios-1 (dcbc9e4da66a).
+  [3.2] Matando instancia 'envios:cf7d5e6e5c8eee2a42b69de3479556ea' (contenedor dcbc9e4da66a) con docker kill
+      [OK]  Contenedor dcbc9e4da66a terminado abruptamente (SIGKILL).
   [3.3] Esperando a que Eureka saque la instancia caída (máx. 120 s)
       [INFO] Instancia aún figura como UP en Eureka (consulta válida #1); esperando expiración de heartbeat…
       [INFO] Instancia aún figura como UP en Eureka (consulta válida #2); esperando expiración de heartbeat…
@@ -73,8 +73,8 @@ Eureka:  http://localhost:8761
       [INFO] Instancia aún figura como UP en Eureka (consulta válida #6); esperando expiración de heartbeat…
       [INFO] Instancia aún figura como UP en Eureka (consulta válida #7); esperando expiración de heartbeat…
       [INFO] Instancia aún figura como UP en Eureka (consulta válida #8); esperando expiración de heartbeat…
-      [OK]  Instancia 'envios:d56ff048cb650909af5b83abc57e1bb3' salió del estado UP en Eureka 34 s después del kill (9 consultas válidas, 0 respuestas no-200 ignoradas).
-      [INFO] Restaurando contenedor 56de154dc317...
+      [OK]  Instancia 'envios:cf7d5e6e5c8eee2a42b69de3479556ea' salió del estado UP en Eureka 34 s después del kill (9 consultas válidas, 0 respuestas no-200 ignoradas).
+      [INFO] Restaurando contenedor dcbc9e4da66a...
 
 ============================================================================
                            RESUMEN REAL OBSERVADO                         

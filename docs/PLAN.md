@@ -28,7 +28,7 @@ Pasa a la etapa 2: autenticación, más lenguajes, sandbox, límite de memoria, 
 
 **Cierre del 28/11.** Verificado desde cero (`docker compose down -v`, `docker compose up -d --build`), con las salidas en [evidencia/](evidencia/):
 
-- Los 12 contenedores quedan sanos en 28 s con las imágenes ya construidas, y `scripts/demo.py` pasa completo.
+- Los 12 contenedores quedan sanos en 32 s con las imágenes ya construidas, y `scripts/demo.py` pasa completo.
 - `scripts/demo_fallas.py --todos` pasó los tres casos en tres corridas seguidas: del kill del worker al veredicto pasaron de 24 a 25 s, la entrada atendió 8 de 8 peticiones con una réplica del gateway apagada y la instancia muerta salió de Eureka en 30 a 34 s. El caso 2, corrido aparte, pasó 10 de 10 veces.
 - Pasan las 124 pruebas de los siete módulos: gateway 19, identidad 20, envios 23, evaluacion 17, concursos 10, eureka 4 y la aplicación de la etapa 1 31.
 - Entraron los pasos 1, 2, 3 y 4, el circuit breaker y los timeouts del paso 6, y el paso 7: Actuator, la vista de estado y el id de correlación en los logs del gateway, `identidad`, `envios` y `concursos`.

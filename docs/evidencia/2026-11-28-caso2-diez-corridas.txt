@@ -1,15 +1,15 @@
 Caso 2 de la demo de fallas (réplica del gateway apagada), diez corridas seguidas, 2026-11-28
 Comando: python scripts/demo_fallas.py --caso 2 --contrasena <SIEMBRA_CONTRASENA_DEMO>
 
-Corrida 1: PASÓ · 200/1027ms 200/19ms 200/11ms 200/0ms 200/15ms 200/0ms 200/16ms 200/0ms
-Corrida 2: PASÓ · 200/20ms 200/17ms 200/14ms 200/6ms 200/1ms 200/0ms 200/15ms 200/0ms
-Corrida 3: PASÓ · 200/3ms 200/19ms 200/24ms 200/1ms 200/15ms 200/0ms 200/16ms 200/6ms
-Corrida 4: PASÓ · 200/23ms 200/18ms 200/1010ms 200/8ms 200/7ms 200/27ms 200/0ms 200/11ms
-Corrida 5: PASÓ · 200/9ms 200/5ms 200/6ms 200/34ms 200/6ms 200/1ms 200/0ms 200/12ms
-Corrida 6: PASÓ · 200/10ms 200/7ms 200/5ms 200/18ms 200/6ms 200/5ms 200/19ms 200/13ms
-Corrida 7: PASÓ · 200/28ms 200/7ms 200/29ms 200/11ms 200/8ms 200/5ms 200/1ms 200/0ms
-Corrida 8: PASÓ · 200/8ms 200/28ms 200/26ms 200/0ms 200/15ms 200/0ms 200/0ms 200/35ms
-Corrida 9: PASÓ · 200/3ms 200/1007ms 200/8ms 200/6ms 200/3ms 200/0ms 200/11ms 200/0ms
-Corrida 10: PASÓ · 200/0ms 200/12ms 200/6ms 200/6ms 200/18ms 200/5ms 200/5ms 200/16ms
+Corrida 1: PASÓ · 200/1018ms 200/15ms 200/15ms 200/0ms 200/15ms 200/0ms 200/0ms 200/16ms
+Corrida 2: PASÓ · 200/11ms 200/7ms 200/23ms 200/0ms 200/10ms 200/16ms 200/7ms 200/4ms
+Corrida 3: PASÓ · 200/7ms 200/5ms 200/6ms 200/9ms 200/23ms 200/0ms 200/7ms 200/24ms
+Corrida 4: PASÓ · 200/7ms 200/23ms 200/1002ms 200/13ms 200/22ms 200/28ms 200/26ms 200/0ms
+Corrida 5: PASÓ · 200/23ms 200/6ms 200/5ms 200/23ms 200/36ms 200/0ms 200/9ms 200/22ms
+Corrida 6: PASÓ · 200/21ms 200/18ms 200/34ms 200/4ms 200/5ms 200/22ms 200/9ms 200/5ms
+Corrida 7: PASÓ · 200/16ms 200/6ms 200/5ms 200/4ms 200/7ms 200/4ms 200/5ms 200/0ms
+Corrida 8: PASÓ · 200/18ms 200/1016ms 200/6ms 200/0ms 200/15ms 200/0ms 200/15ms 200/0ms
+Corrida 9: PASÓ · 200/5ms 200/5ms 200/6ms 200/5ms 200/6ms 200/3ms 200/7ms 200/5ms
+Corrida 10: PASÓ · 200/12ms 200/5ms 200/6ms 200/21ms 200/5ms 200/5ms 200/5ms 200/2ms
 
 Pasaron 10 de 10

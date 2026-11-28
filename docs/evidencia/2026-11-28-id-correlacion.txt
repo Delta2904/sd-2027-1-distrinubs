@@ -1,0 +1,15 @@
+Id de correlación en los logs, 2026-11-28
+Se inicia sesión y se sube un envío por la entrada con X-Correlation-Id: cierre-1795863903, y se busca ese id en los logs.
+
+== POST /api/envios
+HTTP/1.1 201 Created
+X-Correlation-Id: cierre-1795863903
+{"envioId":7,"estado":"recibido"}
+
+== docker compose logs nginx gateway identidad envios | grep cierre-1795863903
+identidad-1  | 2026-11-28 11:05:03.152 [http-nio-8083-exec-2] INFO  [cierre-1795863903] m.d.identidad.FiltroCorrelacion - POST /api/auth/login -> 200 (48 ms)
+gateway-2    | 2026-11-28T11:05:03.153Z  INFO 1 --- [gateway] [r-http-epoll-27] m.d.g.c.FiltroCorrelacionGateway         : [cierre-1795863903] POST /api/auth/login -> 200 (50 ms)
+envios-1     | 2026-11-28 11:05:03.583 [http-nio-8081-exec-4] INFO  [cierre-1795863903] m.d.envios.FiltroCorrelacion - POST /api/envios -> 201 (61 ms)
+nginx-1      | 172.20.0.1 [2026-11-28T11:05:03+00:00] "POST /api/auth/login HTTP/1.1" 200 destino=172.20.0.12:8080 tiempo=0.052s id=cierre-1795863903
+nginx-1      | 172.20.0.1 [2026-11-28T11:05:03+00:00] "POST /api/envios HTTP/1.1" 201 destino=172.20.0.11:8080 tiempo=0.193s id=cierre-1795863903
+gateway-1    | 2026-11-28T11:05:03.590Z  INFO 1 --- [gateway] [or-http-epoll-6] m.d.g.c.FiltroCorrelacionGateway         : [cierre-1795863903] POST /api/envios -> 201 (184 ms)

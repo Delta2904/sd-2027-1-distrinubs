@@ -31,7 +31,7 @@ docker compose up -d --build
 
 En PowerShell, el segundo comando es `Copy-Item .env.ejemplo .env`. El `.env` trae el secreto de los tokens y las contraseñas de la siembra, y no se sube al repositorio. Sin él, Compose se detiene y dice qué variable falta.
 
-Con eso basta: cada servicio aplica sus migraciones al arrancar, `concursos` siembra el concurso de demo e `identidad` siembra las cuentas. Cuando el comando termina, el sistema ya recibe peticiones. Con las imágenes ya construidas, los 12 contenedores quedaron sanos en 28 s; la primera vez, la construcción tarda unos minutos más.
+Con eso basta: cada servicio aplica sus migraciones al arrancar, `concursos` siembra el concurso de demo e `identidad` siembra las cuentas. Cuando el comando termina, el sistema ya recibe peticiones. Con las imágenes ya construidas, los 12 contenedores quedaron sanos en 32 s; la primera vez, la construcción tarda unos minutos más.
 
 | Contenedor | Qué es | Puerto en esta computadora |
 |---|---|---|
