@@ -10,6 +10,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -71,18 +73,35 @@ public class EstadoServiciosController {
     public EstadoServiciosResponse obtenerEstado() {
         List<EstadoServiciosResponse.ServicioDetalle> servicios = new ArrayList<>();
 
-        // 1. Base de datos local (solo verifica conexión sin leer tablas de otros módulos)
+        // 1. Base de datos local
         servicios.add(verificarBaseDatos());
 
-        // 2. Servicios e infraestructura separados: consultan su health si existen, si no NO_DISPONIBLE
-        servicios.add(consultarServicio("gateway", "infraestructura", "/actuator/health"));
-        servicios.add(consultarServicio("identidad", "servicio", "/actuator/health"));
-        servicios.add(consultarServicio("envios", "servicio", "/actuator/health"));
-        servicios.add(consultarServicio("evaluacion", "servicio", "/actuator/health"));
-        servicios.add(consultarServicio("concursos", "servicio", "/actuator/health"));
-        servicios.add(consultarServicio("marcador", "servicio", "/actuator/health"));
-        servicios.add(consultarServicio("directorio", "infraestructura", "/actuator/health"));
-        servicios.add(consultarServicio("mensajeria", "infraestructura", ""));
+        // 2. Servicios externos - consultas en paralelo
+        List<CompletableFuture<EstadoServiciosResponse.ServicioDetalle>> futures = new ArrayList<>();
+        String[] nombres = {"gateway","identidad","envios","evaluacion","concursos","marcador","directorio","mensajeria"};
+        String[] tipos = {"infraestructura","servicio","servicio","servicio","servicio","servicio","infraestructura","infraestructura"};
+        String[] rutas = {"/actuator/health","/actuator/health","/actuator/health","/actuator/health","/actuator/health","/actuator/health","/actuator/health",""};
+        for (int i = 0; i < nombres.length; i++) {
+            final String n = nombres[i];
+            final String t = tipos[i];
+            final String r = rutas[i];
+            futures.add(CompletableFuture.supplyAsync(() -> consultarServicio(n, t, r)));
+        }
+        // Esperar resultados con un timeout global (7 s)
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(7, TimeUnit.SECONDS);
+        } catch (Exception ignored) {
+            // Si se agota el tiempo, los futures que no terminaron reportarán excepción abajo
+        }
+        for (var f : futures) {
+            try {
+                servicios.add(f.get());
+            } catch (Exception e) {
+                // En caso de error inesperado, registrar como NO_DISPONIBLE
+                servicios.add(new EstadoServiciosResponse.ServicioDetalle("unknown", "", "NO_DISPONIBLE", 0, 0, "Error al consultar servicio: " + e.getMessage()));
+            }
+        }
 
         int activos = 0;
         int caidos = 0;
@@ -95,7 +114,7 @@ public class EstadoServiciosController {
             }
         }
 
-        String global = caidos > 0 ? "DEGRADADO" : (activos > 0 ? "UP" : "NO_DISPONIBLE");
+        String global = (caidos > 0 || noDisponibles > 0) ? "DEGRADADO" : (activos > 0 ? "UP" : "NO_DISPONIBLE");
         var resumen = new EstadoServiciosResponse.ResumenServicios(activos, caidos, noDisponibles);
 
         return new EstadoServiciosResponse(Instant.now(), global, servicios, resumen);

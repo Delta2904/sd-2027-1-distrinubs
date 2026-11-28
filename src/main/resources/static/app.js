@@ -559,7 +559,11 @@ async function cargarObservabilidad() {
       grid.appendChild(tarjeta);
     }
   } catch (e) {
-    grid.innerHTML = `<p class="error">No se pudo obtener el estado de observabilidad: ${e.message}</p>`;
+    const errorP = document.createElement('p');
+    errorP.className = 'error';
+    errorP.textContent = 'No se pudo obtener el estado de observabilidad: ' + e.message;
+    grid.innerHTML = '';
+    grid.appendChild(errorP);
   }
 }
 
