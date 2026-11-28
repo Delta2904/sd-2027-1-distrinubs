@@ -83,7 +83,8 @@ Se verificó de punta a punta el 28/11/2026, desde cero: `docker compose down -v
 9. **Directorio.** `gateway`, `identidad`, `concursos` y `envios` se registran en Eureka. El gateway los encuentra por nombre; no hay direcciones fijas.
 10. **Circuit breaker y tiempos de espera.** El gateway espera a un servicio 2 s para conectar y 7 s para responder. Si un servicio deja de contestar, su circuito abre y el gateway responde 503 de inmediato, con un JSON que dice qué servicio falta.
 11. **Front.** Inicio de sesión, subir envío, estado y veredicto, tabla de posiciones y vista del estado de los servicios. Si un servicio no responde, muestra un aviso con el código y el id de correlación de la petición.
-12. **Demo de fallas.** `scripts/demo_fallas.py` provoca tres fallas reales sobre los contenedores y comprueba el resultado de cada una.
+12. **Id de correlación en los logs.** nginx genera un id por petición, el gateway lo propaga y `identidad`, `envios` y `concursos` lo escriben en cada línea de log. Con `docker compose logs nginx gateway envios | grep <id>` se sigue una petición de la entrada al servicio.
+13. **Demo de fallas.** `scripts/demo_fallas.py` provoca tres fallas reales sobre los contenedores y comprueba el resultado de cada una.
 
 ## Qué no hace la etapa 2
 
@@ -94,7 +95,7 @@ Se verificó de punta a punta el 28/11/2026, desde cero: `docker compose down -v
 - **Renovación de lease.** El lease es fijo. Un envío que tarda más que su lease puede retomarlo otro worker; la unicidad del resultado evita que cuente dos veces.
 - **Evaluación final e invalidación al cierre.** En vivo solo corren los casos del marcador provisional.
 - **Interfaz de organizador y de administrador.** El concurso lo carga la siembra. Las cuentas se administran por la API de `identidad`, sin pantalla.
-- **Id de correlación en los logs de los servicios separados.** nginx lo genera, lo registra y lo manda en `X-Correlation-Id`; el front lo muestra. `gateway`, `identidad`, `envios`, `concursos` y `evaluacion` todavía no lo escriben en sus logs.
+- **Id de correlación más allá de la petición HTTP.** El id no viaja en el mensaje de RabbitMQ: `evaluacion` registra el número de envío en cada línea, no el id de la petición. Tampoco viaja en la consulta de validación del token que el gateway y `envios` hacen a `identidad`: esa consulta queda en el log de `identidad` con un id propio.
 - **Consumidor de la cola de mensajes muertos.** La cola `envios.evaluacion.dlq` existe y recibe los mensajes que `evaluacion` rechaza o que superan el límite de 3 entregas, pero nadie la lee ni la muestra.
 - **Prueba de carga contra los servicios.** `scripts/carga.py` no inicia sesión, así que no corre contra este Compose. El número de carga que hay es el de la etapa 1.
 - **Vista de estado protegida.** `/api/observabilidad/estado` es pública y su respuesta incluye las direcciones internas de los servicios y el texto de las excepciones. Sirve para la demo; no se presenta como condición de producción.
@@ -105,7 +106,7 @@ Se verificó de punta a punta el 28/11/2026, desde cero: `docker compose down -v
 - `marcador` como servicio, con mensajes de resultado y Redis delante.
 - C++, C, Java y JavaScript: compiladores en la imagen de `evaluacion` y paso de compilación con su propio tope.
 - Sandbox por envío, límite de memoria, renovación de lease y evaluación final.
-- Id de correlación en los logs de cada servicio separado.
+- Llevar el id de correlación al mensaje de RabbitMQ y a la validación del token en `identidad`.
 - Consumidor de la cola de mensajes muertos y una vista para organizadores de los envíos con `ERROR_SERVIDOR`.
 - `scripts/carga.py` con inicio de sesión, para repetir la prueba de carga contra los servicios.
 - Comprobar dos riesgos de `evaluacion`: si el código del alumno puede leer `/proc/<pid>/environ` del proceso Java, y si un `#include` puede filtrar archivos del servidor cuando haya compilación.
@@ -187,11 +188,11 @@ Cada módulo corre sus pruebas dentro de Docker, con JDK 21. El comando está en
 
 | Módulo | Pruebas | Resultado el 28/11/2026 |
 |---|---|---|
-| `servicios/gateway` | 17 | Pasan |
-| `servicios/identidad` | 18 | Pasan |
-| `servicios/envios` | 21 | Pasan |
+| `servicios/gateway` | 19 | Pasan |
+| `servicios/identidad` | 20 | Pasan |
+| `servicios/envios` | 23 | Pasan |
 | `servicios/evaluacion` | 17 | Pasan |
-| `servicios/concursos` | 8 | Pasan |
+| `servicios/concursos` | 10 | Pasan |
 | `servicios/eureka` | 4 | Pasan |
 | Aplicación de la etapa 1 (raíz) | 31 | Pasan |
 

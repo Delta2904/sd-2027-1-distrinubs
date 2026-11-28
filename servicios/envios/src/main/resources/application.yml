@@ -65,3 +65,8 @@ management:
     web:
       exposure:
         include: health,info
+
+logging:
+  pattern:
+    # Cada línea lleva el id de correlación de la petición, si la hay.
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{idCorrelacion:-}] %logger{36} - %msg%n"

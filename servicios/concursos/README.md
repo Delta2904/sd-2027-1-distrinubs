@@ -6,6 +6,7 @@ Servicio desacoplado del juez en línea Distrinubs para la etapa `02-separacion`
 - Dueño de datos de `concursos`, `problemas` y `casos_prueba`.
 - Carga automática de la siembra idempotente al arrancar (`SiembraConcursos`).
 - Conserva la tabla de posiciones mientras no exista el servicio `marcador`. La tabla lista solo las cuentas con rol de alumno: las de organizador y de administración no compiten.
+- Escribe en cada línea de log el `X-Correlation-Id` que le manda el gateway (`FiltroCorrelacion`) y registra una línea por petición.
 - No escribe en `cuentas`: las siembra y las lista `identidad`, su dueña. Este servicio solo las lee para armar la tabla.
 - Registro dinámico como cliente de descubrimiento en Netflix Eureka (`concursos`).
 

@@ -106,6 +106,7 @@ flowchart TB
 - **Circuit breaker:** hay un circuito por servicio destino. Cuenta como falla una petición que no llegó al servicio. Con 5 llamadas y la mitad fallidas, abre 10 s y responde 503 con el nombre del servicio, sin intentar la llamada. Cada réplica lleva su propio circuito.
 - **Eureka:** se registran `gateway`, `identidad`, `concursos` y `envios`. `evaluacion` no: no recibe peticiones, consume de la cola. Cada servicio renueva su registro cada 5 s y el registro vence a los 15 s; el directorio revisa cada 5 s, con la auto-preservación apagada.
 - **`app`** es la aplicación de la etapa 1 con su evaluación y su siembra apagadas. Solo sirve el front y la vista de estado, que consulta `/actuator/health` de cada servicio por la red interna.
+- **Id de correlación:** nginx genera un id por petición y lo manda en `X-Correlation-Id`; el gateway lo propaga y `identidad`, `envios` y `concursos` lo escriben en cada línea de log. El front lo muestra en sus avisos.
 - **Puertos publicados:** `8080` (nginx) y, solo en `127.0.0.1`, `8761` (Eureka), `15672` (consola de RabbitMQ) y `5432` (PostgreSQL), para la demo de fallas y para inspección.
 
 **Planeado, no implementado.**
@@ -114,7 +115,7 @@ flowchart TB
 - Redis, para la caché del marcador o para sesiones y revocación.
 - C++, C, Java y JavaScript: el esquema ya admite esos valores, pero `envios` solo acepta `PYTHON3` y `evaluacion` solo ejecuta Python 3.
 - Sandbox por envío y límite de memoria: el código del alumno corre como proceso hijo de `evaluacion`.
-- Id de correlación en los logs de los servicios separados: nginx lo genera y lo manda, y hoy solo lo escriben nginx y `app`.
+- Id de correlación en el mensaje de RabbitMQ y en la validación del token: hoy `evaluacion` registra el número de envío, no el id de la petición.
 - Consumidor de la cola de mensajes muertos: la cola recibe los mensajes rechazados, pero nadie la lee.
 - Renovación de lease, evaluación final e interfaz de organizador.
 

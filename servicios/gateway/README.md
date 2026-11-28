@@ -17,6 +17,7 @@ API Gateway de Distrinubs para la etapa `02-separacion`.
   - **Rutas sin normalizar:** una ruta con segmentos `.` o `..` (también codificados) o con `//` se rechaza con `400 Bad Request` antes de decidir si es pública.
   - **Rutas protegidas:** exige `Authorization: Bearer <token>` (HS256 con `sub` igual al id de cuenta en texto, `usuario`, `nombre`, `rol`, `jti`, `iat`, `iatMs`, `exp`), verifica localmente firma y vencimiento (`VerificadorJwtGateway`) y confirma revocación/bloqueo contra `identidad` (`GET /api/auth/validar`). Solo el `401` y el `403` de `identidad` se devuelven como tales. Si `identidad` cae, expira el timeout o responde cualquier otro código, el gateway responde `503 Service Unavailable` (falla cerrada); los errores posteriores de otros servicios aguas abajo no se enmascaran como falla de `identidad`.
   - **Cabeceras internas propagadas:** limpia cualquier cabecera `X-Usuario-*` recibida del cliente y propaga `X-Usuario-Id` (id numérico de cuenta), `X-Usuario-Login` (nombre de usuario) y `X-Usuario-Rol`.
+- **Id de correlación (`FiltroCorrelacionGateway`):** toma el `X-Correlation-Id` que manda nginx, o genera uno si no llega, lo propaga al servicio destino, lo devuelve en la respuesta y escribe una línea de log por petición con el id, el método, la ruta, el estado y el tiempo. Corre antes que el filtro de autenticación, así que también registra las peticiones rechazadas.
 - **Tiempos de espera hacia los servicios:** 2 s para conectar y 7 s para la respuesta.
 - **Circuit breaker por ruta (Spring Cloud CircuitBreaker con Resilience4j):**
   - Hay un circuito por servicio destino: `circuito-concursos`, `circuito-identidad`, `circuito-envios` y `circuito-marcador`. Las tres rutas que van a `identidad` comparten el suyo.
@@ -55,7 +56,7 @@ API Gateway de Distrinubs para la etapa `02-separacion`.
 - **`/no-disponible/<nombre>` responde a cualquiera**: es la ruta interna del aviso y no pide token; solo devuelve el `503`.
 
 ## Cómo se prueba
-Las pruebas cubren el contexto, las rutas configuradas en `RouteLocator`, el filtro de autenticación, el cliente hacia `identidad` y el circuit breaker (abre tras las fallas, responde el `503` con el nombre del servicio, cierra cuando el servicio vuelve y no abre por un error que responde el servicio). Desde `servicios/gateway/`:
+Las pruebas cubren el contexto, las rutas configuradas en `RouteLocator`, el filtro de autenticación, el filtro del id de correlación, el cliente hacia `identidad` y el circuit breaker (abre tras las fallas, responde el `503` con el nombre del servicio, cierra cuando el servicio vuelve y no abre por un error que responde el servicio). Desde `servicios/gateway/`:
 
 ```bash
 mvn test

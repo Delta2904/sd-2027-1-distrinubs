@@ -16,7 +16,7 @@ Microservicio encargado de recibir soluciones, asegurar idempotencia por intento
 
 - **No consume la cola ni ejecuta código:** eso lo hace `evaluacion`. La cola de mensajes muertos (`envios.evaluacion.dlq`) recibe los mensajes que `evaluacion` rechaza o que superan el límite de entregas, pero todavía nadie la lee ni la muestra.
 - **No hay un contenedor aparte que migre:** este servicio aplica sus migraciones al arrancar, igual que los demás, sobre la base compartida.
-- **No escribe el id de correlación en sus logs:** el gateway recibe `X-Correlation-Id` de nginx, pero este servicio todavía no lo registra.
+- **El id de correlación no sale de la petición HTTP:** el servicio escribe en cada línea de log el `X-Correlation-Id` que le manda el gateway (`FiltroCorrelacion`) y registra una línea por petición, pero no lo pone en el mensaje de RabbitMQ ni en la consulta a `identidad`.
 - **Lista de lenguajes:** el servicio solo acepta `PYTHON3`; cualquier otro lenguaje se rechaza con `400 Bad Request`, aunque el esquema ya lo admita. El equipo dejó los demás lenguajes fuera de esta entrega: `ENVIOS_LENGUAJES` no debe ampliarse hasta que `evaluacion` sepa ejecutarlos.
 
 ## Propiedad de datos
