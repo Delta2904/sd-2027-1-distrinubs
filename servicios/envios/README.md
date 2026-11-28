@@ -16,7 +16,7 @@ Microservicio encargado de recibir soluciones, asegurar idempotencia por intento
 
 - **No consume la cola ni ejecuta código:** la evaluación y el manejo completo de la cola de mensajes muertos (DLQ) de punta a punta quedan pendientes de integrarse con `evaluacion`.
 - **Coordinación de migraciones en Compose:** falta acordar en `docker-compose.yml` qué servicio o contenedor ejecuta las migraciones para no depender del orden de arranque.
-- **Enrutamiento en el gateway:** el gateway no debe enrutar `/api/envios` a este servicio hasta que entre la pantalla de inicio de sesión del front, ya que exige `Authorization: Bearer`.
+- **Recorrido completo con el front:** el front ya inicia sesión y manda `Authorization: Bearer`, que este servicio exige. Falta probar el recorrido completo (front, gateway, `envios`) con el Compose.
 - **Lista de lenguajes:** el servicio solo acepta `PYTHON3`. Qué lenguajes se aceptan es una decisión que el equipo todavía no toma; mientras tanto, cualquier otro lenguaje se rechaza con `400 Bad Request`, aunque el esquema ya lo admita. `ENVIOS_LENGUAJES` no debe ampliarse hasta que el equipo decida la lista y `evaluacion` sepa ejecutar esos lenguajes.
 
 ## Propiedad de datos

@@ -18,8 +18,9 @@ import org.springframework.stereotype.Component;
  * migraciones y antes de que abra el puerto.
  *
  * <p>Excepción temporal a la regla del dueño de datos: {@code cuentas} es de
- * Inicio de sesión, pero en 01 no hay inicio de sesión, así que las cuentas
- * solo las escribe esta siembra. Es idempotente: ids fijos y upsert por id.
+ * Inicio de sesión, pero en la etapa 2 (paso 1) este servicio todavía siembra
+ * las cuentas de demo, hasta que pasen al servicio {@code identidad}. Es
+ * idempotente: ids fijos y upsert por id.
  *
  * <p>Para la prueba de carga puede agregar cuentas {@code carga001},
  * {@code carga002}, … con ids desde 101, solo si se pide con

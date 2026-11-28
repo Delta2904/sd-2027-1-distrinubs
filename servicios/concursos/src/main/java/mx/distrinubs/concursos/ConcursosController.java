@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Controlador REST para el módulo de Concursos y problemas (etapa 01-monolito).
+ * Controlador REST para el módulo de Concursos y problemas (etapa 02-separacion).
  *
  * <p>Responsable de:
  * <ul>

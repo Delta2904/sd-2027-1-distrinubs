@@ -7,7 +7,8 @@
 -- upsert por id (ON CONFLICT (id) DO UPDATE). Correrlo varias veces no duplica
 -- ni rompe nada.
 --
--- En la etapa 1 el límite de memoria se guarda, pero no se aplica.
+-- Por ahora el límite de memoria se guarda, pero no se aplica: aplicarlo es
+-- trabajo del servicio `evaluacion`.
 --
 -- Lo ejecuta la aplicación al arrancar (SiembraConcursos, del paquete concursos), después de
 -- las migraciones. No hace falta correrlo a mano.

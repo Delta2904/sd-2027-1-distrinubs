@@ -33,9 +33,19 @@ API Gateway de Distrinubs para la etapa `02-separacion`.
 - `RUTA_IDENTIDAD_URI`: URI de reenvío para administración de cuentas (por omisión: `lb://identidad`).
 - `RUTA_MARCADOR_URI`: URI de reenvío para marcador (por omisión: `lb://marcador`).
 
-## Cómo construir y correr pruebas
+## Qué no hace este servicio y qué falta
+- **No contiene lógica de negocio ni acceso a base de datos**: únicamente valida el token, enruta y balancea peticiones HTTP hacia los microservicios registrados en Eureka.
+- **No emite tokens ni guarda sesiones**: el gateway valida el token de cada petición con su filtro, pero el inicio de sesión, la emisión del token, el bloqueo y la revocación son del servicio `identidad`. Tampoco decide permisos por rol: propaga el rol verificado y cada servicio decide.
+- **Ruta pendiente de respaldo en esta etapa**: `/api/marcador/**` ya está declarada en la configuración, pero su servicio destino (`marcador`) todavía no existe.
 
-Desde `servicios/gateway/`:
+## Cómo se prueba
+Las pruebas cubren el contexto, las rutas configuradas en `RouteLocator`, el filtro de autenticación y el cliente hacia `identidad`. Desde `servicios/gateway/`:
+
+```bash
+mvn test
+```
+
+Sin Java ni Maven instalados, con Docker:
 
 ```bash
 docker build --target construccion -t distrinubs-gateway-test .
