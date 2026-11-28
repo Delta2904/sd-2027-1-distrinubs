@@ -90,12 +90,12 @@ Después:
 ### Joshua: `concursos`, `gateway` y `marcador`
 
 Primero (paso 1):
-- [ ] `concursos` como servicio, con su siembra y las rutas actuales. En este paso conserva la tabla de posiciones y las cuentas de demo.
+- [x] `concursos` como servicio, con su siembra y las rutas actuales. En este paso conserva la tabla de posiciones y las cuentas de demo.
 
 Entrada (paso 2, puede empezar ya contra el monolito):
-- [ ] Probar el primer día qué versión de Spring Cloud funciona con Spring Boot 3.3.13.
-- [ ] Gateway en 2 réplicas, con rutas por prefijo y sin lógica de negocio.
-- [ ] Registrar el gateway en Eureka y dejar listas las rutas para que nginx y el circuit breaker de Emiliano se conecten.
+- [x] Probar el primer día qué versión de Spring Cloud funciona con Spring Boot 3.3.13.
+- [x] Gateway en 2 réplicas, con rutas por prefijo y sin lógica de negocio.
+- [x] Registrar el gateway en Eureka y dejar listas las rutas para que nginx y el circuit breaker de Emiliano se conecten.
 
 Después:
 - [ ] `marcador` aparte (paso 5): consume los resultados, guarda su propio modelo y calcula la tabla.

@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: concursos
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:distrinubs}
+    username: ${DB_USER:distrinubs}
+    password: ${DB_PASSWORD:distrinubs}
+
+  flyway:
+    out-of-order: true
+
+siembra:
+  activa: true
+  cuentas-carga: ${SIEMBRA_CUENTAS_CARGA:0}
+
+server:
+  port: ${PORT:8082}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: ${EUREKA_CLIENT_ENABLED:true}
+    fetch-registry: ${EUREKA_CLIENT_ENABLED:true}
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

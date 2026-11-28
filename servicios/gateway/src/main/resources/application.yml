@@ -1,0 +1,52 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        - id: ruta-concursos
+          uri: ${RUTA_CONCURSOS_URI:lb://concursos}
+          predicates:
+            - Path=/api/concursos/**
+
+        - id: ruta-cuentas-demo
+          uri: ${RUTA_CUENTAS_DEMO_URI:lb://concursos}
+          predicates:
+            - Path=/api/cuentas-demo/**
+
+        - id: ruta-envios
+          uri: ${RUTA_ENVIOS_URI:lb://envios}
+          predicates:
+            - Path=/api/envios/**
+
+        - id: ruta-auth
+          uri: ${RUTA_AUTH_URI:lb://identidad}
+          predicates:
+            - Path=/api/auth/**
+
+        - id: ruta-marcador
+          uri: ${RUTA_MARCADOR_URI:lb://marcador}
+          predicates:
+            - Path=/api/marcador/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: ${EUREKA_CLIENT_ENABLED:true}
+    fetch-registry: ${EUREKA_CLIENT_ENABLED:true}
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
