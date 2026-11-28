@@ -14,8 +14,9 @@ Microservicio encargado de la autenticación, emisión y validación de tokens J
 
 ## Qué no hace y qué falta
 
-- **No levanta su propio `docker-compose.yml`:** la integración en el Compose general de la etapa queda pendiente de coordinación con el resto de los servicios, incluido acordar qué servicio o contenedor aplica las migraciones.
+- **No tiene Compose propio:** lo levanta el `docker-compose.yml` de la raíz. Ahí cada servicio aplica sus migraciones al arrancar; no hay un contenedor aparte que migre.
 - **Sin caché en Redis:** cada validación contra `/api/auth/validar` consulta PostgreSQL; agregar Redis para sesiones y revocación queda pendiente solo si la carga lo requiere.
+- **Id de correlación:** escribe en cada línea de log el `X-Correlation-Id` que recibe (`FiltroCorrelacion`) y registra una línea por petición. Las consultas de validación del token que hacen el gateway y `envios` no traen ese encabezado, así que quedan con un id generado aquí.
 - **Sin auto-registro público de alumnos:** las cuentas nuevas las crea un administrador por `POST /api/identidad/cuentas` o la siembra al iniciar.
 
 ## Propiedad de datos

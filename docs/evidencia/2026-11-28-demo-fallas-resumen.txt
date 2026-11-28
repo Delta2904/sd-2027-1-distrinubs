@@ -1,0 +1,10 @@
+Demo de fallas, tres corridas seguidas desde cero, 2026-11-28
+Comando: python scripts/demo_fallas.py --todos --contrasena <SIEMBRA_CONTRASENA_DEMO>
+Entre corridas se esperó a que los 12 contenedores volvieran a estar healthy y 20 s más.
+
+Corrida 1: 3 de 3 casos pasan · caso 1: 25 s del kill del worker al veredicto ACCEPTED · caso 2: 8/8 · caso 3: 30 s para salir de Eureka
+Corrida 2: 3 de 3 casos pasan · caso 1: 25 s del kill del worker al veredicto ACCEPTED · caso 2: 8/8 · caso 3: 34 s para salir de Eureka
+Corrida 3: 3 de 3 casos pasan · caso 1: 24 s del kill del worker al veredicto ACCEPTED · caso 2: 8/8 · caso 3: 34 s para salir de Eureka
+
+Corridas con los 3 casos en PASÓ: 3 de 3
+El tiempo del caso 1 se midió con la hora de cada línea de la salida, con resolución de 1 s.

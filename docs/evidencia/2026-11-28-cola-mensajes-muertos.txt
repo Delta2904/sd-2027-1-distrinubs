@@ -1,0 +1,18 @@
+Cola de mensajes muertos, 2026-11-28
+Se publica a mano en la cola envios.evaluacion un mensaje que no trae envioId y se cuenta lo que queda en cada cola.
+
+== Antes: rabbitmqctl list_queues name type messages consumers
+name	type	messages	consumers
+envios.evaluacion.dlq	classic	0	0
+envios.evaluacion	quorum	0	4
+
+== rabbitmqadmin publish message --routing-key envios.evaluacion --payload '{"mensaje":"sin envioId"}'
+Message published and routed successfully
+
+== Después
+name	type	messages	consumers
+envios.evaluacion.dlq	classic	1	0
+envios.evaluacion	quorum	0	4
+
+== Log de evaluacion
+evaluacion-1  | 2026-11-28T10:43:51.518Z ERROR 1 --- [evaluacion] [ntContainer#0-2] m.d.evaluacion.ConsumidorEnvios          : Mensaje sin envioId válido; se manda a la cola de mensajes muertos

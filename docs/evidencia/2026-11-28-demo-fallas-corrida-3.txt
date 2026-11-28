@@ -1,0 +1,87 @@
+$ python scripts/demo_fallas.py --todos --contrasena <SIEMBRA_CONTRASENA_DEMO>
+
+
+============================================================================
+                DISTRINUBS · DEMO DE FALLAS REALES (PASO 4)               
+============================================================================
+
+Gateway: http://localhost:8080
+Eureka:  http://localhost:8761
+
+============================================================================
+            CASO 1: Matar el worker que tiene el lease del envío          
+============================================================================
+
+  [1.1] Comprobando API, contenedores 'evaluacion' y acceso a la base de datos
+      [OK]  Concurso listo (problema 1) y 2 workers detectados.
+  [1.2] Iniciando sesión como 'alumno1' (si el servicio de inicio de sesión existe)
+      [OK]  Sesión iniciada como 'alumno1' (cuenta 1); el token va en Authorization: Bearer.
+  [1.3] Subiendo solución correcta que duerme 700 ms por caso (70 % del límite de 1000 ms)
+      [OK]  Envío 6 creado (estado inicial: recibido).
+  [1.4] Esperando a que un worker tome el envío (estado = 'evaluando')
+      [OK]  Envío 6 en estado 'evaluando'.
+  [1.5] Leyendo el lease del envío en la base de datos e identificando el contenedor del worker
+      [INFO] Lease antes de la falla: worker=worker-32ae7c2cbc50-7c19c263-2, veces_tomado=1
+      [OK]  El worker corre en el contenedor distrinubs-cierre-evaluacion-2 (32ae7c2cbc50).
+  [1.6] Matando el contenedor distrinubs-cierre-evaluacion-2 (32ae7c2cbc50) con SIGKILL
+      [OK]  Contenedor 32ae7c2cbc50 terminado abruptamente.
+  [1.7] Esperando veredicto ACCEPTED (máx. 60 s): otro worker retoma el envío cuando vence el lease
+      [INFO] Worker antes:   worker-32ae7c2cbc50-7c19c263-2 (veces_tomado=1)
+      [INFO] Worker después: worker-59d79d53d864-0f19d55d-1 (veces_tomado=2)
+      [OK]  El envío 6 terminó en ACCEPTED después de que otro worker lo retomó.
+      [INFO] Restaurando contenedor 32ae7c2cbc50…
+
+============================================================================
+                   CASO 2: Apagar una réplica del Gateway                 
+============================================================================
+
+  [2.1] Verificando réplicas del servicio 'gateway' en Docker
+      [OK]  2 réplicas activas y entrada respondiendo HTTP 200 (Id: 3a2d4aa0…).
+  [2.2] Apagando réplica del gateway c95cecf703f5 (docker stop)
+      [OK]  Réplica c95cecf703f5 detenida.
+  [2.3] Enviando 8 peticiones por la entrada con una réplica apagada
+      [OK]  Petición 1/8 -> HTTP 200 (7 ms, Id: c6233fdc…)
+      [OK]  Petición 2/8 -> HTTP 200 (1010 ms, Id: 1a10db28…)
+      [OK]  Petición 3/8 -> HTTP 200 (0 ms, Id: 150820aa…)
+      [OK]  Petición 4/8 -> HTTP 200 (15 ms, Id: 2e0ddf66…)
+      [OK]  Petición 5/8 -> HTTP 200 (33 ms, Id: 663dac86…)
+      [OK]  Petición 6/8 -> HTTP 200 (28 ms, Id: 25c513b9…)
+      [OK]  Petición 7/8 -> HTTP 200 (0 ms, Id: b1103d53…)
+      [OK]  Petición 8/8 -> HTTP 200 (13 ms, Id: 8910a5e5…)
+      [OK]  8/8 peticiones atendidas sin interrupción por la réplica superviviente.
+      [INFO] Restaurando réplica c95cecf703f5...
+
+============================================================================
+             CASO 3: Ver salir de Eureka a una instancia caída            
+============================================================================
+
+  [3.1] Consultando directorio Eureka en http://localhost:8761/eureka/apps
+      [INFO] Registrada en Eureka: ENVIOS | envios:13de6100d7f9cdae3cf920ac0702a002 | status=UP
+      [INFO] Registrada en Eureka: GATEWAY | gateway:685c325e5474e9765cc36b4df89820ee | status=UP
+      [INFO] Registrada en Eureka: GATEWAY | gateway:4baff1a7993b0794c29a1cbaed2f42a7 | status=DOWN
+      [INFO] Registrada en Eureka: IDENTIDAD | identidad:475138b2e82466bfdbbd95a16eba11d7 | status=UP
+      [INFO] Registrada en Eureka: CONCURSOS | concursos:52285ea4ce5378a35702ff8be2d67275 | status=UP
+      [OK]  Instancia 'envios:13de6100d7f9cdae3cf920ac0702a002' de ENVIOS (ipAddr=172.20.0.8) emparejada con el contenedor distrinubs-cierre-envios-1 (dcbc9e4da66a).
+  [3.2] Matando instancia 'envios:13de6100d7f9cdae3cf920ac0702a002' (contenedor dcbc9e4da66a) con docker kill
+      [OK]  Contenedor dcbc9e4da66a terminado abruptamente (SIGKILL).
+  [3.3] Esperando a que Eureka saque la instancia caída (máx. 120 s)
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #1); esperando expiración de heartbeat…
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #2); esperando expiración de heartbeat…
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #3); esperando expiración de heartbeat…
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #4); esperando expiración de heartbeat…
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #5); esperando expiración de heartbeat…
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #6); esperando expiración de heartbeat…
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #7); esperando expiración de heartbeat…
+      [INFO] Instancia aún figura como UP en Eureka (consulta válida #8); esperando expiración de heartbeat…
+      [OK]  Instancia 'envios:13de6100d7f9cdae3cf920ac0702a002' salió del estado UP en Eureka 34 s después del kill (9 consultas válidas, 0 respuestas no-200 ignoradas).
+      [INFO] Restaurando contenedor dcbc9e4da66a...
+
+============================================================================
+                           RESUMEN REAL OBSERVADO                         
+============================================================================
+
+  - Caso 1 (Worker): PASÓ
+  - Caso 2 (Gateway): PASÓ
+  - Caso 3 (Eureka): PASÓ
+
+Todos los casos ejecutados pasaron sobre el sistema real.

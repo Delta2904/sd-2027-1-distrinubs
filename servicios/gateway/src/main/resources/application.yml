@@ -9,38 +9,81 @@ spring:
       discovery:
         locator:
           enabled: false
+      # Cuánto espera el gateway a un servicio: para conectar y para la respuesta.
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 7s
       routes:
         - id: ruta-concursos
           uri: ${RUTA_CONCURSOS_URI:lb://concursos}
           predicates:
             - Path=/api/concursos/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: circuito-concursos
+                fallbackUri: forward:/no-disponible/concursos
 
         - id: ruta-cuentas-demo
           uri: ${RUTA_CUENTAS_DEMO_URI:lb://identidad}
           predicates:
             - Path=/api/cuentas-demo/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: circuito-identidad
+                fallbackUri: forward:/no-disponible/identidad
 
         - id: ruta-envios
           uri: ${RUTA_ENVIOS_URI:lb://envios}
           predicates:
             - Path=/api/envios/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: circuito-envios
+                fallbackUri: forward:/no-disponible/envios
 
         - id: ruta-auth
           uri: ${RUTA_AUTH_URI:lb://identidad}
           predicates:
             - Path=/api/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: circuito-identidad
+                fallbackUri: forward:/no-disponible/identidad
 
         - id: ruta-identidad
           uri: ${RUTA_IDENTIDAD_URI:lb://identidad}
           predicates:
             - Path=/api/identidad/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: circuito-identidad
+                fallbackUri: forward:/no-disponible/identidad
 
         - id: ruta-marcador
           uri: ${RUTA_MARCADOR_URI:lb://marcador}
           predicates:
             - Path=/api/marcador/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: circuito-marcador
+                fallbackUri: forward:/no-disponible/marcador
 
 distrinubs:
+  # Circuit breaker de cada ruta. Cuenta como falla una petición que no llegó al
+  # servicio (conexión rechazada, tiempo agotado o sin instancias en el directorio).
+  circuito:
+    ventana-llamadas: ${CIRCUITO_VENTANA_LLAMADAS:10}
+    minimo-llamadas: ${CIRCUITO_MINIMO_LLAMADAS:5}
+    porcentaje-fallas: ${CIRCUITO_PORCENTAJE_FALLAS:50}
+    espera-abierto: ${CIRCUITO_ESPERA_ABIERTO:10s}
+    llamadas-de-prueba: ${CIRCUITO_LLAMADAS_DE_PRUEBA:2}
+    tiempo-maximo: ${CIRCUITO_TIEMPO_MAXIMO:8s}
   autenticacion:
     jwt-secreto: ${JWT_SECRETO}
     identidad-url: ${IDENTIDAD_URL:http://identidad:8083}

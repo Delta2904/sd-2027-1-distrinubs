@@ -3,3 +3,7 @@
 docs
 target
 *.md
+servicios
+scripts
+nginx
+.env

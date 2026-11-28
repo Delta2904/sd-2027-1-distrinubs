@@ -5,8 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication(scanBasePackages = {
         "mx.distrinubs.concursos",
-        "mx.distrinubs.tablaposiciones",
-        "mx.distrinubs.iniciosesion"
+        "mx.distrinubs.tablaposiciones"
 })
 public class ConcursosApplication {
 
