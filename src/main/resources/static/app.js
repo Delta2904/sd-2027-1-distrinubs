@@ -83,6 +83,9 @@ async function pedir(url, opciones = {}) {
   const temporizador = setTimeout(() => control.abort(), TIMEOUT_PETICION_MS);
 
   const idCorr = opciones.idCorrelacion || nuevoUuid();
+  // Id de esta petición. Las alertas usan este y no el global, que otras
+  // peticiones concurrentes (sondeo, tabla, estado) sobrescriben.
+  let idPeticion = idCorr;
   ultimoIdCorrelacion = idCorr;
   if ($('id-correlacion-actual')) $('id-correlacion-actual').textContent = idCorr;
 
@@ -106,6 +109,7 @@ async function pedir(url, opciones = {}) {
 
     const corrRespuesta = respuesta.headers.get('X-Correlation-Id');
     if (corrRespuesta) {
+      idPeticion = corrRespuesta;
       ultimoIdCorrelacion = corrRespuesta;
       if ($('id-correlacion-actual')) $('id-correlacion-actual').textContent = corrRespuesta;
     }
@@ -116,26 +120,26 @@ async function pedir(url, opciones = {}) {
         '502 Bad Gateway',
         'El API Gateway no pudo conectarse con el servicio de destino. Es posible que el contenedor se haya caído o esté reiniciando.',
         502,
-        ultimoIdCorrelacion
+        idPeticion
       );
     } else if (respuesta.status === 503) {
       mostrarAlertaFalla(
         '503 Service Unavailable',
         'El servicio solicitado no está disponible temporalmente (sobrecarga o réplica apagada).',
         503,
-        ultimoIdCorrelacion
+        idPeticion
       );
     } else if (respuesta.status === 504) {
       mostrarAlertaFalla(
         '504 Gateway Timeout',
         'El servicio tardó demasiado en responder a la petición a través del Gateway.',
         504,
-        ultimoIdCorrelacion
+        idPeticion
       );
     } else if (respuesta.status === 401) {
       // Sesión expirada o no autorizada
       if (sesionActual && !url.includes('/api/auth/login')) {
-        mostrarAlertaFalla('Sesión expirada (401)', 'Tu token ha vencido o no es válido. Por favor inicia sesión nuevamente.', 401, ultimoIdCorrelacion);
+        mostrarAlertaFalla('Sesión expirada (401)', 'Tu token ha vencido o no es válido. Por favor inicia sesión nuevamente.', 401, idPeticion);
         cerrarSesion();
       }
     }
@@ -147,14 +151,14 @@ async function pedir(url, opciones = {}) {
         'Timeout de red',
         `La petición a ${url} excedió el tiempo límite (${TIMEOUT_PETICION_MS / 1000} s). ¿Está corriendo el gateway o servicio?`,
         'TIMEOUT',
-        ultimoIdCorrelacion
+        idPeticion
       );
     } else {
       mostrarAlertaFalla(
         'Falla de conexión',
         `No se pudo comunicar con el Gateway en ${rutaCompleta}: ${error.message}.`,
         'RED',
-        ultimoIdCorrelacion
+        idPeticion
       );
     }
     throw error;
@@ -559,6 +563,17 @@ async function cargarObservabilidad() {
       grid.appendChild(tarjeta);
     }
   } catch (e) {
+    // Sin respuesta no se sabe el estado: la insignia y los contadores no deben
+    // quedarse con los valores de la última consulta que sí respondió.
+    const badgeGlobal = $('estado-global-badge');
+    if (badgeGlobal) {
+      badgeGlobal.textContent = 'NO_DISPONIBLE';
+      badgeGlobal.className = 'badge-estado estado-no_disponible';
+    }
+    for (const id of ['obs-activos', 'obs-caidos', 'obs-no-disponibles']) {
+      if ($(id)) $(id).textContent = '-';
+    }
+
     const errorP = document.createElement('p');
     errorP.className = 'error';
     errorP.textContent = 'No se pudo obtener el estado de observabilidad: ' + e.message;

@@ -459,6 +459,13 @@ tr:nth-child(even) {
   color: #4b5563;
 }
 
+/* Antes de la primera respuesta todavía no se sabe el estado. */
+.estado-neutro {
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
 .servicio-detalle {
   font-size: 0.82rem;
   color: #4b5563;

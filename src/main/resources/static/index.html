@@ -98,11 +98,11 @@
             <div class="campo-lenguaje">
               <label for="lenguaje">Lenguaje</label>
               <select id="lenguaje">
-                <option value="PYTHON3">Python 3</option>
-                <option value="CPP">C++ (g++)</option>
-                <option value="C">C (gcc)</option>
-                <option value="JAVA">Java (clase Main)</option>
-                <option value="JAVASCRIPT">JavaScript (Node.js)</option>
+                <option value="PYTHON3" selected>Python 3</option>
+                <option value="CPP" disabled>C++ (g++) (próximamente)</option>
+                <option value="C" disabled>C (gcc) (próximamente)</option>
+                <option value="JAVA" disabled>Java (clase Main) (próximamente)</option>
+                <option value="JAVASCRIPT" disabled>JavaScript (Node.js) (próximamente)</option>
               </select>
             </div>
             <button id="btn-plantilla" type="button" class="btn-secundario" title="Cargar plantilla inicial">Cargar plantilla</button>
@@ -150,7 +150,7 @@
       </p>
 
       <div id="resumen-observabilidad" class="resumen-observabilidad">
-        <span>Estado global: <strong id="estado-global-badge" class="badge-estado estado-up">UP</strong></span>
+        <span>Estado global: <strong id="estado-global-badge" class="badge-estado estado-neutro">-</strong></span>
         <span>Activos: <strong id="obs-activos">-</strong></span>
         <span>Caídos: <strong id="obs-caidos">-</strong></span>
         <span>No disponibles: <strong id="obs-no-disponibles">-</strong></span>
