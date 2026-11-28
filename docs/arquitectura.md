@@ -2,7 +2,7 @@
 
 Distrinubs es un juez en línea para práctica y concursos de programación competitiva: el alumno sube una solución, el sistema la evalúa contra casos de prueba y publica el veredicto y la tabla de posiciones.
 
-Este documento describe la etapa 2, que separa el monolito en servicios. Dibuja lo que existe en el código al 28/11/2026, en `02-separacion` y en las ramas personales que faltan por integrar, y marca aparte lo que sigue pendiente.
+Este documento describe la etapa 2, que separa el monolito en servicios. Dibuja lo que levanta el `docker-compose.yml` de `02-separacion` al 28/11/2026 y marca aparte lo que está planeado y no existe.
 
 ## Diagrama funcional
 
@@ -10,14 +10,15 @@ El recorrido del alumno y del sistema, desde el inicio de sesión hasta el vered
 
 ```mermaid
 flowchart TD
-    A["El alumno abre el front (hoy lo sirve el monolito app)"] --> B["Inicia sesión: POST /api/auth/login en identidad"]
-    B -->|"Credenciales correctas"| C["Recibe un token JWT firmado (sub, rol, exp, jti)"]
+    A["El alumno abre el front en http://localhost:8080"] --> B["Inicia sesión: POST /api/auth/login en identidad"]
+    B -->|"Credenciales correctas"| C["Recibe un token JWT firmado (cuenta, rol y vencimiento)"]
     B -->|"401 credenciales inválidas · 403 cuenta bloqueada"| B
 
-    C --> D["Elige el problema y escribe su solución (hoy solo Python 3)"]
+    C --> D["Elige el problema y escribe su solución en Python 3"]
     D --> E["Envía: POST /api/envios con intentoId y Authorization: Bearer"]
     E --> F["gateway revisa la firma del token y pregunta a identidad si sigue vigente"]
-    F -->|"Sin token, vencido o revocado: 401 · identidad no responde: 503"| ERR["El front muestra el error con su id de correlación"]
+    F -->|"Sin token, vencido o revocado: 401 · identidad no responde: 503"| ERR["El front muestra el aviso con su id de correlación"]
+    F -->|"envios no contesta o su circuito está abierto: 503 con el nombre del servicio"| ERR
     F -->|"Token vigente"| G["envios vuelve a validar el token y guarda el envío en PostgreSQL (EN_COLA)"]
 
     G -->|"Mismo intentoId"| G2["200: devuelve el envío que ya existía, sin duplicar"]
@@ -31,30 +32,35 @@ flowchart TD
     I -->|"Termina de correr los casos"| J["Guarda un solo resultado por envío y confirma el mensaje"]
 
     J --> K["El front sondea GET /api/envios/{id} y muestra el veredicto"]
-    J --> L["Tabla de posiciones: GET /api/concursos/activo/tabla, que calcula concursos"]
-    A --> M["Vista de estado: GET /api/observabilidad/estado, en el monolito"]
+    J --> L["Tabla de posiciones: GET /api/concursos/activo/tabla, que calcula concursos solo con los alumnos"]
+    A --> M["Vista de estado: GET /api/observabilidad/estado, en el contenedor app"]
 ```
 
 ## Diagrama de arquitectura
 
-Los contenedores de la etapa 2 y cómo se comunican.
+Los contenedores que levanta el Compose y cómo se comunican. Todas las flechas existen en el código.
 
 ```mermaid
 flowchart TB
     Nav["Navegador<br/>front, scripts/demo.py y scripts/demo_fallas.py"]
-    Nginx["nginx<br/>balanceador de entrada"]
-    GW["gateway :8080<br/>Spring Cloud Gateway con filtro de token"]
-    App["monolito app :8080<br/>front, /api/observabilidad/estado y Actuator"]
-    Eureka["Eureka Server<br/>directorio"]
+    Nginx["nginx :8080<br/>único puerto publicado de la aplicación<br/>least_conn entre las réplicas del gateway"]
 
-    subgraph Servicios["Servicios"]
-        Ident["identidad :8083<br/>/api/auth/** y /api/identidad/**<br/>login, JWT, bloqueo y revocación"]
-        Envios["envios :8081<br/>/api/envios/**<br/>recepción, idempotencia y barrido"]
-        Conc["concursos :8082<br/>/api/concursos/** y /api/cuentas-demo/**<br/>concurso, tabla y cuentas de demo"]
-        Eval["evaluacion :8085<br/>N workers con lease"]
+    subgraph Entrada["gateway · 2 réplicas"]
+        GW1["gateway 1<br/>filtro de token, rutas y circuit breaker"]
+        GW2["gateway 2<br/>filtro de token, rutas y circuit breaker"]
     end
 
-    subgraph Rabbit["RabbitMQ"]
+    App["app :8080<br/>aplicación de la etapa 1<br/>solo el front y /api/observabilidad/estado"]
+    Eureka["eureka :8761<br/>directorio"]
+
+    subgraph Servicios["Servicios"]
+        Ident["identidad :8083<br/>/api/auth/**, /api/identidad/** y /api/cuentas-demo<br/>inicio de sesión, JWT, bloqueo y revocación"]
+        Envios["envios :8081<br/>/api/envios/**<br/>recepción, idempotencia y barrido"]
+        Conc["concursos :8082<br/>/api/concursos/**<br/>concurso, problemas y tabla de posiciones"]
+        Eval["evaluacion :8085 · 2 contenedores<br/>2 consumidores cada uno, con lease"]
+    end
+
+    subgraph Rabbit["rabbitmq"]
         EX["exchange distrinubs.envios"]
         Q["cola quorum envios.evaluacion<br/>límite de 3 entregas"]
         DLQ["cola envios.evaluacion.dlq"]
@@ -62,15 +68,19 @@ flowchart TB
         Q -->|"DLX distrinubs.envios.dlx"| DLQ
     end
 
-    PG[("PostgreSQL 17<br/>base distrinubs")]
+    PG[("db · PostgreSQL 17<br/>base distrinubs")]
 
-    Nav -->|"front y vista de estado"| App
-    Nav -.->|"Authorization: Bearer"| Nginx
-    Nginx -.-> GW
+    Nav --> Nginx
+    Nginx -->|"rutas exactas del front y la vista de estado"| App
+    Nginx -->|"todo lo demás"| GW1
+    Nginx --> GW2
 
-    GW -->|"lb://identidad"| Ident
-    GW -->|"lb://envios"| Envios
-    GW -->|"lb://concursos"| Conc
+    GW1 -->|"lb://identidad"| Ident
+    GW1 -->|"lb://envios"| Envios
+    GW1 -->|"lb://concursos"| Conc
+    GW2 --> Ident
+    GW2 --> Envios
+    GW2 --> Conc
     Envios -->|"GET /api/auth/validar"| Ident
 
     Envios -->|"publica envioId"| EX
@@ -80,31 +90,33 @@ flowchart TB
     Envios --> PG
     Conc --> PG
     Eval --> PG
-    App --> PG
+    App -->|"/actuator/health de cada servicio"| Servicios
 
-    GW -.->|"registro y descubrimiento"| Eureka
+    GW1 -.->|"registro y lista de instancias"| Eureka
+    GW2 -.-> Eureka
     Ident -.-> Eureka
     Envios -.-> Eureka
     Conc -.-> Eureka
 ```
 
-**Leyenda.** Línea sólida: hay código que lo hace, en `02-separacion` o en una rama por integrar. Línea punteada: pendiente de integrar.
+**Leyenda.** Línea sólida: una petición o un mensaje. Línea punteada: registro en el directorio y consulta de la lista de instancias.
 
-- `gateway` y `concursos` ya están en `02-separacion`. `envios`, `identidad`, el filtro de token del gateway, `evaluacion`, el front nuevo y la vista de estado están en ramas personales que faltan por integrar.
-- Los servicios ya traen el cliente de Eureka y el gateway enruta con `lb://`, pero ninguna rama tiene todavía el servidor Eureka, la configuración de nginx ni el `docker-compose.yml` de la etapa 2. El Compose actual solo levanta la base de datos y el monolito.
-- El gateway valida el token en dos pasos: revisa la firma y el vencimiento con el secreto compartido, y después consulta `GET /api/auth/validar` en `identidad` para saber si la cuenta está bloqueada o el token revocado. Si `identidad` no responde, rechaza con 503. `envios` repite la misma validación.
-- El gateway todavía no tiene ruta hacia el front ni hacia `/api/observabilidad/estado`: se entra a ellos directo por el monolito, que usa el mismo puerto 8080 por omisión.
-- De los servicios, `identidad`, `envios` y `concursos` traen el cliente de Eureka. `evaluacion` no se registra: no recibe peticiones, consume de la cola.
-- La vista de estado puede consultar `/actuator/health` de cada servicio, pero sus URL todavía no están configuradas, así que hoy los reporta como `NO_DISPONIBLE`.
+- **nginx** es la entrada única. Manda al contenedor `app` solo las rutas exactas del front y de la vista de estado; todo lo demás va a la réplica del gateway con menos conexiones activas. Si una réplica no contesta, la petición pasa a la otra y la caída se deja de usar 10 s. `/actuator` responde 404 desde afuera.
+- **gateway** valida el token en dos pasos: revisa la firma y el vencimiento con el secreto compartido, y consulta `GET /api/auth/validar` en `identidad` para saber si la cuenta está bloqueada o el token revocado. Si `identidad` no responde, rechaza con 503. `envios` repite la misma validación.
+- **Circuit breaker:** hay un circuito por servicio destino. Cuenta como falla una petición que no llegó al servicio. Con 5 llamadas y la mitad fallidas, abre 10 s y responde 503 con el nombre del servicio, sin intentar la llamada. Cada réplica lleva su propio circuito.
+- **Eureka:** se registran `gateway`, `identidad`, `concursos` y `envios`. `evaluacion` no: no recibe peticiones, consume de la cola. Cada servicio renueva su registro cada 5 s y el registro vence a los 15 s; el directorio revisa cada 5 s, con la auto-preservación apagada.
+- **`app`** es la aplicación de la etapa 1 con su evaluación y su siembra apagadas. Solo sirve el front y la vista de estado, que consulta `/actuator/health` de cada servicio por la red interna.
+- **Puertos publicados:** `8080` (nginx) y, solo en `127.0.0.1`, `8761` (Eureka), `15672` (consola de RabbitMQ) y `5432` (PostgreSQL), para la demo de fallas y para inspección.
 
 **Planeado, no implementado.**
 
-- `marcador` como servicio aparte: el gateway ya tiene la ruta `/api/marcador/**`, pero el servicio no existe. La tabla de posiciones la calcula `concursos`.
+- `marcador` como servicio aparte, con mensajes de resultado. El gateway ya tiene la ruta `/api/marcador/**`, pero el servicio no existe: la tabla de posiciones la calcula `concursos`.
 - Redis, para la caché del marcador o para sesiones y revocación.
-- Gateway en 2 réplicas detrás de nginx: el gateway no guarda estado, pero falta el Compose que lo escale.
-- C++, C, Java y JavaScript: `envios` ya admite esos valores en su tabla, pero solo acepta `PYTHON3` y `evaluacion` solo ejecuta Python 3.
-- Id de correlación en los logs de los servicios separados: hoy solo lo tiene el monolito.
-- Consumidor de la cola de mensajes muertos, circuit breaker en el gateway y sandbox por envío.
+- C++, C, Java y JavaScript: el esquema ya admite esos valores, pero `envios` solo acepta `PYTHON3` y `evaluacion` solo ejecuta Python 3.
+- Sandbox por envío y límite de memoria: el código del alumno corre como proceso hijo de `evaluacion`.
+- Id de correlación en los logs de los servicios separados: nginx lo genera y lo manda, y hoy solo lo escriben nginx y `app`.
+- Consumidor de la cola de mensajes muertos: la cola recibe los mensajes rechazados, pero nadie la lee.
+- Renovación de lease, evaluación final e interfaz de organizador.
 
 ## Flujo de un envío de punta a punta
 
@@ -112,7 +124,7 @@ flowchart TB
 sequenceDiagram
     autonumber
     actor A as Alumno (front)
-    participant N as nginx (pendiente)
+    participant N as nginx
     participant G as gateway
     participant I as identidad
     participant E as envios
@@ -121,7 +133,7 @@ sequenceDiagram
     participant V as evaluacion
 
     A->>N: POST /api/envios con intentoId y Authorization: Bearer
-    N->>G: reenvía a una réplica del gateway
+    N->>G: reenvía a la réplica con menos conexiones, con X-Correlation-Id
     G->>G: revisa firma y vencimiento del token
     G->>I: GET /api/auth/validar
     I-->>G: 200, cuenta sin bloqueo y token sin revocar
@@ -141,7 +153,8 @@ sequenceDiagram
     V->>R: confirma el mensaje
 
     loop cada segundo, hasta tener veredicto
-        A->>G: GET /api/envios/{id}
+        A->>N: GET /api/envios/{id}
+        N->>G: reenvía
         G->>E: reenvía, con el token ya validado
         E->>P: lee resultados y el lease vigente
         E-->>A: recibido, en cola, evaluando o evaluado con su veredicto
@@ -169,18 +182,22 @@ Todos los servicios usan la misma base `distrinubs` en PostgreSQL. Cada tabla ti
 | `leases_evaluacion` | `evaluacion` | `envios`, para mostrar "evaluando" y para su barrido |
 | `resultados` | `evaluacion` | `envios` y la tabla de posiciones |
 
-- La tabla de posiciones no tiene tablas propias: `concursos` la calcula leyendo las de otros.
-- Excepción temporal: `concursos` todavía siembra las cuentas de demo en `cuentas`, hasta que esa siembra quede solo en `identidad`.
-- Cada servicio trae las migraciones de las tablas que usa y las aplica sobre la misma base, sin detenerse por las migraciones de otros servicios que no trae. Falta acordar en el Compose quién las ejecuta primero.
+- La tabla de posiciones no tiene tablas propias: `concursos` la calcula leyendo las de otros, solo con las cuentas de alumno.
+- Cada servicio aplica sus migraciones al arrancar, sobre la misma base, y tolera las de los demás. No hay un contenedor aparte que migre.
+- RabbitMQ y Eureka no son fuente de verdad: la cola se puede volver a llenar con el barrido de `envios` y la lista de instancias se reconstruye con las renovaciones.
 
 ## Manejo de fallas
 
-Los tres casos de `scripts/demo_fallas.py`. Si falta alguna pieza, el script lo reporta como "no disponible" y no como éxito.
+Los tres casos de `scripts/demo_fallas.py`, medidos el 28/11/2026 con el Compose de la etapa 2. Las salidas completas están en [evidencia/](evidencia/).
 
-| Caso | Qué se provoca | Qué se espera ver |
+| Caso | Qué se provoca | Qué se vio |
 |---|---|---|
-| 1. Worker muerto a media evaluación | Se mata con `SIGKILL` el contenedor del worker que tiene el lease del envío | El envío pasa de "evaluando" a "en cola" y otro worker lo retoma al vencer el lease: termina en `ACCEPTED` y el lease muestra la reentrega (`veces_tomado` crece o cambia el worker) |
-| 2. Réplica del gateway apagada | Se detiene una de las réplicas del gateway con `docker stop` | Ocho peticiones seguidas por la entrada responden HTTP 200: el alumno no nota el corte |
-| 3. Instancia caída en Eureka | Se mata con `docker kill` el contenedor de una instancia registrada, sin que se dé de baja | Al dejar de mandar latidos, la instancia deja de figurar `UP` en `/eureka/apps`; el script informa cuántos segundos tardó |
+| 1. Worker muerto a media evaluación | Se mata con `SIGKILL` el contenedor del worker que tiene el lease del envío | Otro worker retomó el envío como toma 2 y lo dejó en `ACCEPTED` entre 24 y 25 s después del kill, con un solo resultado |
+| 2. Réplica del gateway apagada | Se detiene una de las réplicas del gateway con `docker stop` | 8 de 8 peticiones por la entrada respondieron HTTP 200, en 10 de 10 corridas seguidas. A lo más una petición por corrida tardó cerca de 1 s, lo que nginx espera a la réplica apagada antes de pasar a la otra |
+| 3. Instancia caída en Eureka | Se mata con `docker kill` el contenedor de una instancia registrada, sin que se dé de baja | La instancia dejó de figurar `UP` en `/eureka/apps` entre 30 y 34 s después del kill |
 
-El caso 1 se comprobó de punta a punta contra dos réplicas del monolito. Los casos 2 y 3 necesitan el Compose de la etapa 2, con el gateway en réplicas y Eureka, que todavía no existe.
+Fuera del script se midió el circuit breaker: con `concursos` muerto, cada petición a su ruta tardó 2 s (el tiempo de espera para conectar) hasta que el circuito abrió, tras 8 peticiones entre las dos réplicas. Con el circuito abierto, el 503 llegó en 7 ms. Al arrancar `concursos` de nuevo, la ruta volvió a responder 200 a los 11 s.
+
+También se comprobó la cola de mensajes muertos: un mensaje sin `envioId`, publicado a mano en `envios.evaluacion`, terminó en `envios.evaluacion.dlq`.
+
+Lo que no tiene respaldo: nginx, Eureka, RabbitMQ y PostgreSQL corren en un solo contenedor cada uno, y todo corre en una computadora. Si cae Eureka, el gateway sigue con la última lista que guardó. Si cae nginx, PostgreSQL o la computadora, el sistema no responde hasta que vuelvan; lo ya guardado sobrevive.
