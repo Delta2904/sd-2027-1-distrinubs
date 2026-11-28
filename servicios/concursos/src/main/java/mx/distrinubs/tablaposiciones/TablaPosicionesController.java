@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Controlador REST para el módulo de Tabla de posiciones (etapa 01-monolito).
+ * Controlador REST para el módulo de Tabla de posiciones (etapa 02-separacion, temporalmente en concursos).
  *
  * <p>Responsable de:
  * <ul>
@@ -43,7 +43,7 @@ import org.springframework.web.server.ResponseStatusException;
  *   <li>Aviso a organizadores si el retraso de envíos sin evaluar supera 5 minutos (300 s).</li>
  * </ul>
  *
- * <p>Dueño de datos: en la etapa 1 la tabla de posiciones no escribe
+ * <p>Dueño de datos: en la etapa 2 (paso 1) la tabla de posiciones aún no escribe
  * ninguna tabla, solo lee {@code envios}, {@code resultados}, {@code problemas},
  * {@code cuentas} y {@code concursos}.
  */
