@@ -21,34 +21,53 @@ La etapa 1 es un monolito: una sola aplicación Spring Boot, en un solo proceso,
 
 ## Cómo se levanta
 
-Requisito: Docker con Docker Compose. No hace falta tener Java, Maven ni Python instalados: la aplicación se compila dentro de Docker y su imagen trae Python 3.
+En la rama `02-separacion`, el `docker-compose.yml` ya es el de la etapa 2 y levanta los servicios separados. Esta sección y la de scripts describen ese Compose. Las secciones que siguen, desde "Qué hace la etapa 1", todavía describen el monolito y se actualizan en el cierre de la rama.
+
+Requisito: Docker con Docker Compose. No hace falta tener Java ni Maven instalados: cada servicio se compila dentro de Docker.
 
 ```bash
-git checkout 01-monolito
+git checkout 02-separacion
+cp .env.ejemplo .env
 docker compose up -d --build
 ```
 
-Con eso basta: al arrancar, la aplicación crea el esquema y siembra las cuentas de demo y el concurso. No hay comandos extra, y funciona igual en bash y en PowerShell.
+En PowerShell, el segundo comando es `Copy-Item .env.ejemplo .env`. El `.env` trae el secreto de los tokens y las contraseñas de la siembra, y no se sube al repositorio. Sin él, Compose se detiene y dice qué variable falta.
 
-- **Entrada:** `http://localhost:8080`. Salud de la aplicación: `http://localhost:8080/actuator/health`.
-- **Workers de evaluación:** 2 por omisión. Se cambia con `EVALUACION_WORKERS`: `EVALUACION_WORKERS=4 docker compose up -d` en bash, o `$env:EVALUACION_WORKERS=4; docker compose up -d` en PowerShell.
-- **Puerto ocupado:** si otro proyecto usa el 8080, levanta con otro puerto: `APP_PUERTO=8081 docker compose up -d` en bash, o `$env:APP_PUERTO=8081; docker compose up -d` en PowerShell. La base se publica en `127.0.0.1:5432` y se cambia igual, con `DB_PUERTO_LOCAL`.
-- **Empezar de cero:** `docker compose down -v` borra el volumen de la base, incluidos envíos y resultados. Sin `-v`, los datos se conservan.
-- **Pruebas**, sin Java instalado: `docker build --target construccion -t distrinubs-pruebas .` y luego `docker run --rm distrinubs-pruebas mvn -B -q test`. Las pruebas de la siembra, del tope de reintentos y de varios workers levantan un PostgreSQL 17 embebido dentro del contenedor; no necesitan la base de Compose.
+Con eso basta: cada servicio aplica sus migraciones al arrancar, `concursos` siembra el concurso de demo e `identidad` siembra las cuentas. Cuando el comando termina, el sistema ya recibe peticiones.
+
+| Contenedor | Qué es | Puerto en esta computadora |
+|---|---|---|
+| `nginx` | Balanceador y entrada única. Reparte entre las réplicas del gateway por conexiones activas (`least_conn`) y entrega el front | `8080` |
+| `gateway` (2 réplicas) | Valida el token y manda cada ruta a su servicio, que encuentra en el directorio | No publica |
+| `eureka` | Directorio: los servicios se registran y el gateway los busca por nombre | `127.0.0.1:8761` |
+| `identidad` | Inicio de sesión, tokens y cuentas | No publica |
+| `concursos` | Concurso activo, problemas y tabla de posiciones | No publica |
+| `envios` | Recibe los envíos, los guarda y publica su identificador en RabbitMQ | No publica |
+| `evaluacion` (2 contenedores) | Workers que toman los envíos de RabbitMQ y los evalúan | No publica |
+| `rabbitmq` | Cola entre `envios` y `evaluacion`, con volumen | `127.0.0.1:15672` (consola) |
+| `db` | PostgreSQL 17, con volumen. Todos los servicios la usan, cada uno en sus tablas | `127.0.0.1:5432` |
+| `app` | La aplicación de la etapa 1, con su evaluación y su siembra apagadas. Solo sirve el front y la vista del estado de los servicios | No publica |
+
+- **Entrada:** `http://localhost:8080`. Las cuentas de alumno van de `alumno1` a `alumno5`, con la contraseña `SIEMBRA_CONTRASENA_DEMO` del `.env`.
+- **Estado:** `docker compose ps` muestra la salud de cada contenedor. La lista de instancias registradas se ve en `http://localhost:8761`, y el front trae la vista del estado de los servicios.
+- **Más workers:** `docker compose up -d --scale evaluacion=3` agrega contenedores de `evaluacion`. `EVALUACION_WORKERS` (2 por omisión) son los consumidores dentro de cada contenedor.
+- **Puerto ocupado:** `ENTRADA_PUERTO`, `DB_PUERTO_LOCAL`, `EUREKA_PUERTO_LOCAL` y `RABBITMQ_PUERTO_LOCAL` cambian los puertos de esta computadora. Se ponen en el `.env`. Si cambias el de la base o el del directorio, `scripts/demo_fallas.py` necesita `DATABASE_URL` y `--eureka`.
+- **Empezar de cero:** `docker compose down -v` borra los volúmenes de la base y de la cola, incluidos envíos y resultados. Sin `-v`, los datos se conservan.
+- **Pruebas:** el README de cada servicio, en `servicios/`, dice cómo correr las suyas dentro de Docker. Las de la aplicación de la etapa 1: `docker build --target construccion -t distrinubs-pruebas .` y luego `docker run --rm distrinubs-pruebas mvn -B -q test`.
 
 ## Scripts
 
-En Windows el comando es `python` en lugar de `python3`.
+En Windows el comando es `python` en lugar de `python3`. La contraseña es la de `SIEMBRA_CONTRASENA_DEMO`; los dos scripts de demostración también la toman de esa variable de entorno.
 
 | Script | Comando | Qué hace |
 |---|---|---|
-| `scripts/demo.py` | `python3 scripts/demo.py` | Recorre los puntos 1 a 6 del alcance contra la API: concurso, cuentas, envío con reintento, Wrong Answer, Accepted y tabla |
-| `scripts/demo_fallas.py` | `python3 scripts/demo_fallas.py --todos` | Demostración de manejo de fallas del Paso 4: worker muerto a media evaluación, réplica de gateway apagada y salida de instancia en Eureka. El caso 1 requiere `pip install psycopg2-binary` para leer el lease y, cuando exista el inicio de sesión, la contraseña: `python3 scripts/demo_fallas.py --caso 1 --contrasena <contraseña>`. Los tres casos necesitan el Compose de la etapa 2 (2 réplicas de `evaluacion` para el caso 1; 2 réplicas de gateway y Eureka para los casos 2 y 3); sin él se reportan como "no disponible" |
-| `scripts/carga.py` | `python3 scripts/carga.py --escenario rafaga` | Prueba de carga del marcador: simula 200 alumnos y mide cuánto tarda cada envío en aparecer evaluado en la tabla. Ver "Prueba de carga del marcador" |
+| `scripts/demo.py` | `python3 scripts/demo.py --contrasena <contraseña>` | Recorre los puntos 1 a 6 del alcance contra la API: concurso, cuentas, inicio de sesión, envío con reintento, Wrong Answer, Accepted y tabla |
+| `scripts/demo_fallas.py` | `python3 scripts/demo_fallas.py --todos --contrasena <contraseña>` | Demostración de manejo de fallas: mata al worker que evalúa un envío y comprueba que otro lo retoma, apaga una réplica del gateway y comprueba que la entrada sigue respondiendo, y mata una instancia y mide cuánto tarda en salir del directorio. Requiere `pip install psycopg2-binary` para leer el lease en la base. Al terminar vuelve a arrancar los contenedores que mató |
+| `scripts/carga.py` | `python3 scripts/carga.py --escenario rafaga` | Prueba de carga del marcador de la etapa 1. Todavía no inicia sesión, así que no corre contra este Compose. Ver "Prueba de carga del marcador" |
 
-Sin Python instalado, `demo.py` corre dentro del contenedor: `docker compose exec -T app python3 - < scripts/demo.py` en bash, o `Get-Content scripts/demo.py | docker compose exec -T app python3 -` en PowerShell.
+Sin Python instalado, `demo.py` corre dentro del contenedor `app`, apuntando a la entrada: `docker compose exec -T app python3 - --base http://nginx --contrasena <contraseña> < scripts/demo.py` en bash, o `Get-Content scripts/demo.py | docker compose exec -T app python3 - --base http://nginx --contrasena <contraseña>` en PowerShell.
 
-La siembra ya no es un script: son `src/main/resources/siembra/cuentas.sql` y `concursos.sql`, que la aplicación ejecuta al arrancar. Se apaga con `siembra.activa: false`.
+La siembra no es un script: `concursos` siembra el concurso con `servicios/concursos/src/main/resources/siembra/concursos.sql` e `identidad` siembra las cuentas con las contraseñas del `.env`, los dos al arrancar.
 
 ## Qué hace la etapa 1
 

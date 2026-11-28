@@ -1,6 +1,48 @@
-# Etapa 01-monolito: una aplicación y una base PostgreSQL en una computadora.
-# Se levanta con `docker compose up` y se entra por http://localhost:8080.
-# Las credenciales son solo para uso local.
+# Etapa 02-separacion: los servicios separados en una computadora.
+#
+#   cp .env.ejemplo .env            (en PowerShell: Copy-Item .env.ejemplo .env)
+#   docker compose up -d --build
+#
+# Se entra por http://localhost:8080. Cómo entra una petición:
+#
+#   navegador -> nginx -> gateway (2 réplicas) -> concursos | identidad | envios
+#                                   envios -> RabbitMQ -> evaluacion (2 contenedores)
+#
+# El gateway encuentra a cada servicio en el directorio (Eureka). Todos guardan
+# su estado en la misma base PostgreSQL, cada uno en sus tablas.
+# Las credenciales de la base y de RabbitMQ son solo para uso local.
+
+x-base-datos: &base-datos
+  DB_HOST: db
+  DB_PORT: 5432
+  DB_NAME: distrinubs
+  DB_USER: distrinubs
+  DB_PASSWORD: distrinubs
+
+x-directorio: &directorio
+  EUREKA_CLIENT_ENABLED: "true"
+  EUREKA_SERVER_URL: http://eureka:8761/eureka/
+  # Cada instancia renueva su registro cada 5 s y el directorio la da por caída
+  # a los 15 s sin renovar. Con los valores por omisión (30 y 90 s) una
+  # instancia muerta seguiría en la lista más de un minuto.
+  EUREKA_INSTANCE_LEASE_RENEWAL_INTERVAL_IN_SECONDS: 5
+  EUREKA_INSTANCE_LEASE_EXPIRATION_DURATION_IN_SECONDS: 15
+
+x-mensajeria: &mensajeria
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: 5672
+  RABBITMQ_USER: distrinubs
+  RABBITMQ_PASSWORD: distrinubs
+  # `envios` y `evaluacion` declaran la misma cola. Si este valor difiere entre
+  # los dos, RabbitMQ rechaza la declaración del segundo.
+  ENVIOS_LIMITE_ENTREGAS: ${ENVIOS_LIMITE_ENTREGAS:-3}
+
+# Healthcheck de los servicios Java: su /actuator/health. Cada uno pone su `test`.
+x-salud: &salud
+  interval: 5s
+  timeout: 3s
+  retries: 36
+  start_period: 30s
 
 services:
   db:
@@ -13,8 +55,8 @@ services:
       # Volumen persistente: los envíos y resultados sobreviven a un reinicio.
       - distrinubs_datos:/var/lib/postgresql/data
     ports:
-      # Solo para revisar la base desde la computadora (psql, DBeaver).
-      # Si el 5432 ya está ocupado: DB_PUERTO_LOCAL=5433 docker compose up
+      # Para revisar la base desde la computadora (psql, DBeaver) y para que la
+      # demo de fallas lea el lease. Si el 5432 está ocupado: DB_PUERTO_LOCAL=5433
       - "127.0.0.1:${DB_PUERTO_LOCAL:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U distrinubs -d distrinubs"]
@@ -23,27 +65,202 @@ services:
       retries: 10
     restart: unless-stopped
 
-  app:
-    # La aplicación incluye los workers de evaluación, la siembra y Python 3.
-    build: .
-    ports:
-      # Si el 8080 ya está ocupado: APP_PUERTO=8081 docker compose up
-      - "${APP_PUERTO:-8080}:8080"
+  rabbitmq:
+    # Cola entre `envios` y `evaluacion`. Lleva solo el identificador del envío:
+    # el estado sigue en PostgreSQL.
+    image: rabbitmq:4-management-alpine
+    # Nombre fijo: RabbitMQ guarda sus datos con el nombre del nodo. Sin esto,
+    # al recrear el contenedor no encontraría lo que dejó en el volumen.
+    hostname: rabbitmq
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: distrinubs
-      DB_USER: distrinubs
-      DB_PASSWORD: distrinubs
-      # Hilos de evaluación dentro de la aplicación.
-      EVALUACION_WORKERS: ${EVALUACION_WORKERS:-2}
+      RABBITMQ_DEFAULT_USER: distrinubs
+      RABBITMQ_DEFAULT_PASS: distrinubs
+    volumes:
+      # Los mensajes en cola sobreviven a un reinicio del contenedor.
+      - distrinubs_cola:/var/lib/rabbitmq
+    ports:
+      # Consola de administración, solo desde esta computadora: http://localhost:15672
+      - "127.0.0.1:${RABBITMQ_PUERTO_LOCAL:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 20s
+    restart: unless-stopped
+
+  eureka:
+    # Directorio: los servicios se registran aquí y el gateway los busca por nombre.
+    build: ./servicios/eureka
+    environment:
+      EUREKA_HOSTNAME: eureka
+    ports:
+      # Para ver la lista de instancias (http://localhost:8761) y para la demo de fallas.
+      - "127.0.0.1:${EUREKA_PUERTO_LOCAL:-8761}:8761"
+    healthcheck:
+      <<: *salud
+      test: ["CMD", "curl", "-fsS", "http://localhost:8761/actuator/health"]
+    restart: unless-stopped
+
+  identidad:
+    # Inicio de sesión, tokens, bloqueo y siembra de las cuentas.
+    build: ./servicios/identidad
+    environment:
+      <<: [*base-datos, *directorio]
+      JWT_SECRETO: ${JWT_SECRETO:?Falta JWT_SECRETO. Copia .env.ejemplo como .env y revisa sus valores}
+      JWT_DURACION_SEGUNDOS: ${JWT_DURACION_SEGUNDOS:-86400}
+      SIEMBRA_CONTRASENA_DEMO: ${SIEMBRA_CONTRASENA_DEMO:?Falta SIEMBRA_CONTRASENA_DEMO. Copia .env.ejemplo como .env y revisa sus valores}
+      SIEMBRA_CONTRASENA_ADMIN: ${SIEMBRA_CONTRASENA_ADMIN:?Falta SIEMBRA_CONTRASENA_ADMIN. Copia .env.ejemplo como .env y revisa sus valores}
       # Solo para la prueba de carga: cuentas extra carga001, carga002, ...
       SIEMBRA_CUENTAS_CARGA: ${SIEMBRA_CUENTAS_CARGA:-0}
     depends_on:
-      # La aplicación arranca cuando la base ya acepta conexiones, no antes.
       db:
         condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      <<: *salud
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+    restart: unless-stopped
+
+  concursos:
+    # Concurso activo, problemas y tabla de posiciones. Siembra el concurso de demo.
+    build: ./servicios/concursos
+    environment:
+      <<: [*base-datos, *directorio]
+    depends_on:
+      db:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      <<: *salud
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+    restart: unless-stopped
+
+  envios:
+    # Recibe los envíos, los guarda y publica su identificador en RabbitMQ.
+    build: ./servicios/envios
+    environment:
+      <<: [*base-datos, *directorio, *mensajeria]
+      JWT_SECRETO: ${JWT_SECRETO:?Falta JWT_SECRETO. Copia .env.ejemplo como .env y revisa sus valores}
+      IDENTIDAD_URL: http://identidad:8083
+      ENVIOS_LENGUAJES: ${ENVIOS_LENGUAJES:-PYTHON3}
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    healthcheck:
+      <<: *salud
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+    restart: unless-stopped
+
+  evaluacion:
+    # Workers: toman los envíos de RabbitMQ y los evalúan. No reciben peticiones
+    # de los alumnos ni se registran en el directorio. Para cambiar cuántos
+    # contenedores hay: docker compose up -d --scale evaluacion=3
+    build: ./servicios/evaluacion
+    deploy:
+      replicas: 2
+    environment:
+      <<: [*base-datos, *mensajeria]
+      # Consumidores por contenedor. Cada uno evalúa un envío a la vez.
+      EVALUACION_WORKERS: ${EVALUACION_WORKERS:-2}
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      <<: *salud
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+    restart: unless-stopped
+
+  gateway:
+    # La única puerta de la API, en 2 réplicas sin estado detrás de nginx.
+    build: ./servicios/gateway
+    deploy:
+      replicas: 2
+    environment:
+      <<: *directorio
+      JWT_SECRETO: ${JWT_SECRETO:?Falta JWT_SECRETO. Copia .env.ejemplo como .env y revisa sus valores}
+      IDENTIDAD_URL: http://identidad:8083
+      # Cada cuánto pide la lista al directorio y cuánto tiempo la guarda. Por
+      # omisión son 30 y 35 s: demasiado para notar a tiempo una instancia caída.
+      EUREKA_CLIENT_REGISTRY_FETCH_INTERVAL_SECONDS: 5
+      SPRING_CLOUD_LOADBALANCER_CACHE_TTL: 5s
+      # Timeouts hacia los servicios: 2 s para conectar y 7 s para responder.
+      # Si un servicio no contesta, el gateway responde 504 en vez de quedarse
+      # esperando. Son menores que la espera de nginx (10 s) y que la del front (8 s).
+      SPRING_CLOUD_GATEWAY_HTTPCLIENT_CONNECT_TIMEOUT: 2000
+      SPRING_CLOUD_GATEWAY_HTTPCLIENT_RESPONSE_TIMEOUT: 7s
+    depends_on:
+      # El gateway arranca cuando los servicios ya se registraron en el
+      # directorio: así su primera lista ya los trae y la API responde desde
+      # que `docker compose up` termina.
+      eureka:
+        condition: service_healthy
+      identidad:
+        condition: service_healthy
+      concursos:
+        condition: service_healthy
+      envios:
+        condition: service_healthy
+    healthcheck:
+      <<: *salud
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+    restart: unless-stopped
+
+  app:
+    # La aplicación de la etapa 1, que aquí solo sirve el front y la vista del
+    # estado de los servicios. Su evaluación y su siembra van apagadas: evalúa
+    # `evaluacion` y siembran `concursos` e `identidad`. No publica puerto y
+    # nginx solo le manda esas rutas.
+    build: .
+    environment:
+      <<: *base-datos
+      EVALUACION_ACTIVA: "false"
+      SIEMBRA_ACTIVA: "false"
+      # Direcciones que consulta la vista del estado de los servicios.
+      OBSERVABILIDAD_SERVICIOS_GATEWAY: http://gateway:8080
+      OBSERVABILIDAD_SERVICIOS_IDENTIDAD: http://identidad:8083
+      OBSERVABILIDAD_SERVICIOS_ENVIOS: http://envios:8081
+      OBSERVABILIDAD_SERVICIOS_EVALUACION: http://evaluacion:8085
+      OBSERVABILIDAD_SERVICIOS_CONCURSOS: http://concursos:8082
+      OBSERVABILIDAD_SERVICIOS_DIRECTORIO: http://eureka:8761
+      OBSERVABILIDAD_SERVICIOS_MENSAJERIA: http://rabbitmq:15672
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      <<: *salud
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+    restart: unless-stopped
+
+  nginx:
+    # Balanceador: la entrada única. Reparte entre las réplicas del gateway por
+    # conexiones activas (least_conn) y entrega el front.
+    image: nginx:1.31-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      # Si el 8080 está ocupado: ENTRADA_PUERTO=8081
+      - "${ENTRADA_PUERTO:-8080}:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/salud-nginx"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
 volumes:
   distrinubs_datos:
+  distrinubs_cola:

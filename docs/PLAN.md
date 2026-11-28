@@ -59,9 +59,9 @@ Primero (paso 1):
 - [x] Pasar el worker y el ejecutor de Python a un servicio propio, con su Dockerfile (`servicios/evaluacion`).
 - [x] Consumir de RabbitMQ, con confirmación solo al guardar el resultado, y varios workers con `--scale`. Manda el lease: el worker que recibe el mensaje de un worker caído espera a que venza su lease. Probado con RabbitMQ y PostgreSQL reales: al matar un worker a media evaluación, otro la retoma como toma 2 en unos 21 s y la evalúa una sola vez.
 - [x] Conservar el lease, el resultado único y el tope de 3 tomas con `ERROR_SERVIDOR`.
-- [ ] Probarlo de punta a punta con `envios` cuando entre su pull request.
-- [ ] Armar el `docker-compose.yml` de la etapa 2 (paso 2) y quedarse con él: los demás agregan su servicio con pull requests chicos.
-- [ ] nginx con `least_conn` delante de las réplicas del gateway y Eureka en su contenedor (paso 2). Cada dueño registra su servicio, y Joshua registra el gateway.
+- [x] Probarlo de punta a punta con `envios`. Comprobado el 28/11 con el Compose de la etapa 2: `scripts/demo.py` pasa completo y, en el caso 1 de `scripts/demo_fallas.py`, al matar el contenedor del worker otro retoma el envío como toma 2 y lo deja en `ACCEPTED`.
+- [x] Armar el `docker-compose.yml` de la etapa 2 (paso 2) y quedarse con él: levanta nginx, el gateway en 2 réplicas, Eureka, `identidad`, `concursos`, `envios`, `evaluacion` en 2 contenedores, RabbitMQ y PostgreSQL. Las variables obligatorias van en un `.env`, con `.env.ejemplo` de plantilla.
+- [x] nginx con `least_conn` delante de las réplicas del gateway y Eureka en su contenedor (`servicios/eureka`, paso 2). Comprobado el 28/11 con `scripts/demo_fallas.py`: con una réplica del gateway apagada la entrada atendió 8 de 8 peticiones, y una instancia muerta salió del directorio en 34 s.
 
 Después:
 - [ ] Circuit breaker y timeouts en las rutas del gateway (paso 6), con pull requests que revisa Joshua.
@@ -83,12 +83,12 @@ Autenticación (paso 3):
 - [x] Servicio `identidad` (`servicios/identidad/`): inicio de sesión con contraseña guardada con hash BCrypt, token JWT firmado con vencimiento, bloqueo y revocación de cuentas/tokens (`tokens_revocados`), y los roles alumno, organizador y administrador.
 - [x] En `envios`: rechazar la subida sin token válido (falla cerrada ante caída de `identidad`), rechazar `alumnoId` ajeno para cualquier rol y dejar que cada usuario consulte según su dueño o supervisión. Con eso termina la suplantación por `alumnoId`.
 - [x] Filtro que valida el token, ya integrado en `servicios/gateway/`: las rutas públicas son una lista exacta, rechaza las rutas sin normalizar, aísla los errores de `identidad` respecto a los backends aguas abajo y propaga `X-Usuario-Id`, `X-Usuario-Login` y `X-Usuario-Rol`. El gateway ya manda `/api/cuentas-demo` a `identidad`, que lista solo las cuentas de alumno no bloqueadas. Está cubierto con las pruebas de cada servicio.
-- [ ] Probar la autenticación de punta a punta con el Compose (front, gateway, `identidad` y `envios`): todavía no se ha hecho.
+- [x] Probar la autenticación de punta a punta con el Compose (front, gateway, `identidad` y `envios`). Comprobado el 28/11: el front inicia sesión, manda el token, sube un envío por el gateway y muestra el veredicto; sin token, `envios` y las rutas de administración responden 401.
 - [ ] Acordar con Diego los claims del token y el orden de integración con su pantalla de inicio de sesión y `scripts/demo.py` (ya acepta `--contrasena`).
 
 Después:
 - [ ] Cola de mensajes muertos (`envios.evaluacion.dlq`) con tope de entregas (cola quorum, `x-delivery-limit` 3): lado del productor listo en `servicios/envios/`; falta el consumidor de Emiliano y probarlo de punta a punta (paso 6).
-- [ ] Acordar con Emiliano quién aplica las migraciones en Compose.
+- [ ] Acordar con Emiliano quién aplica las migraciones en Compose. *(En el Compose de la etapa 2 cada servicio aplica las suyas al arrancar y no hay un contenedor aparte que migre. Arranca bien desde una base vacía; falta que el equipo lo confirme como decisión).*
 - [ ] Redis para sesiones y revocación, si hace falta.
 
 ### Joshua: `concursos`, `gateway` y `marcador`
@@ -110,12 +110,12 @@ Después:
 ### Diego: el front, la demo de fallas y la observabilidad
 
 Primero:
-- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde. *(Parcial: el front muestra un aviso claro en 502/503/504, timeout y falla de red, con el id de correlación de esa petición; falta comprobarlo entrando por el gateway).*
-- [ ] Pantalla de inicio de sesión (paso 3), con el token en cada petición. *(Parcial: pantalla y envío de `Authorization: Bearer` apuntando a `POST /api/auth/login` listos; pendiente el servicio `identidad` de Enrique).*
+- [ ] Adaptar el front para que llame a todo por el gateway (las rutas públicas no cambian) y mostrar un error claro cuando un servicio no responde. *(Parcial: el front muestra un aviso claro en 502/503/504, timeout y falla de red, con el id de correlación de esa petición; comprobado el 28/11 con el Compose de la etapa 2 que, entrando por nginx y el gateway, el front carga, inicia sesión, sube un envío y muestra el veredicto y la tabla. Falta comprobar el aviso de error con un servicio caído).*
+- [x] Pantalla de inicio de sesión (paso 3), con el token en cada petición. Comprobado el 28/11 con el Compose de la etapa 2: la pantalla inicia sesión contra `identidad` y manda `Authorization: Bearer` en cada petición.
 
 Después:
-- [ ] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno. *(Parcial: script `scripts/demo_fallas.py` listo para los tres casos; el caso 1 solo pasa si el lease muestra la reentrega y los casos sin sus piezas se reportan como "no disponible". Falta comprobarlo de punta a punta con el Compose de la etapa 2).*
-- [ ] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios. *(Parcial: `FiltroCorrelacion`, Actuator y `/api/observabilidad/estado` listos en el monolito; la vista responde en 6 s aunque la base de datos o un servicio no contesten, y Actuator ya no muestra detalles sin autenticación. Los servicios sin URL de health configurada reportan `NO_DISPONIBLE` y el estado global queda `DEGRADADO`. Falta configurar esas URL y el id de correlación en los logs de cada servicio separado).*
+- [x] Script de la demo de fallas (paso 4): los tres casos del paso, con lo que se ve en cada uno. El caso 1 solo pasa si el lease muestra la reentrega y los casos sin sus piezas se reportan como "no disponible". Comprobado el 28/11 con el Compose de la etapa 2: los tres casos pasan.
+- [ ] Observabilidad mínima (paso 7): Actuator, id de correlación en los logs y una vista del estado de los servicios. *(Parcial: `FiltroCorrelacion`, Actuator y `/api/observabilidad/estado` listos en el monolito; la vista responde en 6 s aunque la base de datos o un servicio no contesten, y Actuator ya no muestra detalles sin autenticación. Los servicios sin URL de health configurada reportan `NO_DISPONIBLE` y el estado global queda `DEGRADADO`. El Compose de la etapa 2 ya configura esas URL y la vista muestra cada servicio; `marcador` sale `NO_DISPONIBLE` porque todavía no existe. Falta el id de correlación en los logs de cada servicio separado).*
 - [ ] Selector de lenguaje en el front (paso 8). *(Parcial: selector y plantillas en el front listos; solo Python 3 está habilitado y los demás aparecen como "próximamente", porque `envios` y `evaluacion` todavía solo aceptan `PYTHON3`).*
 - [ ] Opcional: editor de código al costado del enunciado, junto con el front en React. *(Parcial: editor al costado del enunciado agregado en el front HTML/JS; falta decidir si se migra a React).*
 

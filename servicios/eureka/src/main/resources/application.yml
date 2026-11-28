@@ -1,0 +1,34 @@
+server:
+  port: ${PORT:8761}
+
+spring:
+  application:
+    name: eureka
+
+eureka:
+  instance:
+    hostname: ${EUREKA_HOSTNAME:localhost}
+  client:
+    # Es un solo servidor: no se registra en sí mismo ni busca a otros servidores.
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # La auto-preservación conserva a las instancias que dejan de renovar, por si
+    # la falla es de la red y no de la instancia. Aquí todo corre en una sola
+    # computadora: una instancia que no renueva está caída y debe salir de la lista.
+    enable-self-preservation: ${EUREKA_AUTO_PRESERVACION:false}
+    # Cada cuánto se revisa qué registros vencieron. Por omisión son 60 s.
+    eviction-interval-timer-in-ms: ${EUREKA_INTERVALO_EXPULSION_MS:5000}
+    # Sin la copia de solo lectura, que se actualiza cada 30 s: quien consulta
+    # la lista ve de inmediato las altas y las bajas.
+    use-read-only-response-cache: false
+    # Sin otros servidores de los que copiar la lista, no hay nada que esperar al arrancar.
+    wait-time-in-ms-when-sync-empty: 0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
