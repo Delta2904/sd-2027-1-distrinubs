@@ -14,10 +14,10 @@ Microservicio encargado de recibir soluciones, asegurar idempotencia por intento
 
 ## Qué no hace y qué falta
 
-- **No consume la cola ni ejecuta código:** la evaluación y el manejo completo de la cola de mensajes muertos (DLQ) de punta a punta quedan pendientes de integrarse con `evaluacion`.
-- **Coordinación de migraciones en Compose:** falta acordar en `docker-compose.yml` qué servicio o contenedor ejecuta las migraciones para no depender del orden de arranque.
-- **Recorrido completo con el front:** el front ya inicia sesión y manda `Authorization: Bearer`, que este servicio exige. Falta probar el recorrido completo (front, gateway, `envios`) con el Compose.
-- **Lista de lenguajes:** el servicio solo acepta `PYTHON3`. Qué lenguajes se aceptan es una decisión que el equipo todavía no toma; mientras tanto, cualquier otro lenguaje se rechaza con `400 Bad Request`, aunque el esquema ya lo admita. `ENVIOS_LENGUAJES` no debe ampliarse hasta que el equipo decida la lista y `evaluacion` sepa ejecutar esos lenguajes.
+- **No consume la cola ni ejecuta código:** eso lo hace `evaluacion`. La cola de mensajes muertos (`envios.evaluacion.dlq`) recibe los mensajes que `evaluacion` rechaza o que superan el límite de entregas, pero todavía nadie la lee ni la muestra.
+- **No hay un contenedor aparte que migre:** este servicio aplica sus migraciones al arrancar, igual que los demás, sobre la base compartida.
+- **No escribe el id de correlación en sus logs:** el gateway recibe `X-Correlation-Id` de nginx, pero este servicio todavía no lo registra.
+- **Lista de lenguajes:** el servicio solo acepta `PYTHON3`; cualquier otro lenguaje se rechaza con `400 Bad Request`, aunque el esquema ya lo admita. El equipo dejó los demás lenguajes fuera de esta entrega: `ENVIOS_LENGUAJES` no debe ampliarse hasta que `evaluacion` sepa ejecutarlos.
 
 ## Propiedad de datos
 

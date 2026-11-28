@@ -32,6 +32,7 @@ El tope de 3 tomas (`evaluacion.max-tomas`) cierra el envío con `ERROR_SERVIDOR
 - **Sin sandbox:** el código del alumno corre como proceso hijo del servicio, sin root, en un directorio temporal y sin variables de entorno, pero sin contenedor propio ni límite de memoria. Es un riesgo declarado.
 - Solo Python 3. Sin renovación de lease: un envío que tarda más que su lease puede retomarlo otro worker; la unicidad del resultado evita que cuente dos veces.
 - No consume la cola de mensajes muertos ni publica resultados para `marcador`.
+- No escribe el id de correlación de la petición en sus logs.
 
 ## Qué falta
 
